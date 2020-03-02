@@ -127,7 +127,6 @@ def encode(matched, priors, variances):
     Return:
         encoded boxes (tensor), Shape: [num_priors, 4]
     """
-
     # dist b/t match center and prior's center
     g_cxcy = (matched[:, :2] + matched[:, 2:])/2 - priors[:, :2]
     # encode variance
@@ -179,8 +178,8 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
     """Apply non-maximum suppression at test time to avoid detecting too many
     overlapping bounding boxes for a given object.
     Args:
-        boxes: (tensor) The location preds for the img, Shape: [num_priors,4].
-        scores: (tensor) The class predscores for the img, Shape:[num_priors].
+        boxes: (tensor) The location preds for the img, Shape: [num, 4].
+        scores: (tensor) The class predscores for the img, Shape:[num].
         overlap: (float) The overlap thresh for suppressing unnecessary boxes.
         top_k: (int) The Maximum number of box preds to consider.
     Return:

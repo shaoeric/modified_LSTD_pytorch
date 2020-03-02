@@ -184,7 +184,7 @@ class VOCDetection(Dataset):
             x_max *= w
             y_min *= h
             y_max *= h
-            mask[int(y_min): int(y_max), int(x_min): int(x_max)] = 255
+            mask[int(y_min): int(y_max), int(x_min): int(x_max)] = 1
         return mask.astype(np.uint8)
 
 
@@ -198,6 +198,8 @@ if __name__ == '__main__':
     iterator = iter(dataloader)
     # images:[batchsize, channels, h, w]
     # targets:list of tensor[number_bbox, 5]
+    # masks:[batchsize, 1, h, w]
     images, targets, masks = next(iterator)
+    print(targets)
 
 
