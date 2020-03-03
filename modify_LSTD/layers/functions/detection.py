@@ -41,7 +41,6 @@ class Detect(Function):
             decoded_boxes = decode(loc_data[i], prior_data, self.variance) # [8732，4]
             # For each class, perform nms
             conf_scores = conf_preds[i].clone()
-
             for cl in range(1, self.num_classes):
                 c_mask = conf_scores[cl].gt(self.conf_thresh)  # [8732]
                 scores = conf_scores[cl][c_mask]                # [n]

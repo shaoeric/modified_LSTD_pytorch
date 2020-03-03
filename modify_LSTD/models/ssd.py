@@ -7,8 +7,6 @@ from layers.modules import L2Norm, MultiBoxLoss
 from config import voc
 import os
 
-use_cuda = torch.cuda.is_available()
-
 
 class SSD(nn.Module):
     """Single Shot Multibox Architecture
@@ -36,13 +34,16 @@ class SSD(nn.Module):
         self.priorbox = PriorBox(self.cfg)
         with torch.no_grad():
             self.priors = self.priorbox.forward()
+
+        # if use_cuda:
+        #     self.priors = self.priors.cuda()
         self.size = size
-        print(self.priors.shape)
+
         # SSD network
         self.vgg = nn.ModuleList(base)
         # Layer learns to scale the l2 normalized features from conv4_3
         self.L2Norm = L2Norm(512, 20)
-        self.L2Norm_add = L2Norm(128, 1)
+        # self.L2Norm_add = L2Norm(128, 1)
         self.extras = nn.ModuleList(extras)
 
         # print(self.priors.shape)
@@ -81,8 +82,6 @@ class SSD(nn.Module):
         # apply vgg up to conv4_3 relu
         for k in range(23):
             x = self.vgg[k](x)
-            if k == 8:
-                sources.append(self.L2Norm_add(x))
         # print(x.shape)  # [1, 512, 38, 38]
 
         s = self.L2Norm(x)
@@ -127,12 +126,13 @@ class SSD(nn.Module):
         loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)  # torch.Size([1, 34928])
         conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)  # torch.Size([1, 183372])
         if self.phase == "test":
-            output = self.detect(
-                loc.view(loc.size(0), -1, 4),                   # loc preds
-                self.softmax(conf.view(conf.size(0), -1,
-                             self.num_classes)),                # conf preds
-                self.priors.type(type(x.data))                  # default boxes
-            )
+            with torch.no_grad():
+                output = self.detect.forward(
+                    loc.view(loc.size(0), -1, 4),                   # loc preds
+                    self.softmax(conf.view(conf.size(0), -1,
+                                 self.num_classes)),                # conf preds
+                    self.priors.type(type(x.data))                 # default boxes
+                )
         else:
             output = (
                 loc.view(loc.size(0), -1, 4),
@@ -243,6 +243,12 @@ def build_ssd(phase, size=300, num_classes=21):
                                      mbox[str(size)], num_classes)
     return SSD(phase, size, base_, extras_, head_, num_classes)
 
+
 if __name__ == '__main__':
-    net = build_ssd("train").cuda()
-    # print(net)
+    use_cuda = not torch.cuda.is_available()
+    net = build_ssd("test")
+    img = torch.Tensor(1, 3, 300, 300)
+    if use_cuda:
+        net = net.cuda()
+        img = img.cuda()
+    net(img)

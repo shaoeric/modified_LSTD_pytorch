@@ -185,7 +185,6 @@ def nms(boxes, scores, overlap=0.5, top_k=200):
     Return:
         The indices of the kept boxes with respect to num_priors.
     """
-
     keep = scores.new(scores.size(0)).zero_().long()
     if boxes.numel() == 0:
         return keep

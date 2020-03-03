@@ -40,11 +40,14 @@ class SSD_BD(nn.Module):
         ])
         self.mask_generator = MaskGenerate(3, 64, self.phase, thresh=0.5)
         self.mask_block = MaskBlock()
-        if use_cuda:
-            self.mask_generator = self.mask_generator.cuda()
 
         with torch.no_grad():
             self.priors = self.priorbox.forward()
+
+        if use_cuda:
+            self.mask_generator = self.mask_generator.cuda()
+            self.priors = self.priors.cuda()
+
         self.size = size
 
         # SSD network
@@ -119,13 +122,15 @@ class SSD_BD(nn.Module):
 
         loc = torch.cat([o.view(o.size(0), -1) for o in loc], 1)  # torch.Size([1, 34928])
         conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)  # torch.Size([1, 183372])
+
         if self.phase == "test":
-            output = self.detect(
-                loc.view(loc.size(0), -1, 4),                   # loc preds
-                self.softmax(conf.view(conf.size(0), -1,
-                             self.num_classes)),                # conf preds
-                self.priors.type(type(x.data))                  # default boxes
-            )
+            with torch.no_grad():
+                output = self.detect.forward(
+                    loc.view(loc.size(0), -1, 4),                   # loc preds
+                    self.softmax(conf.view(conf.size(0), -1,
+                                 self.num_classes)),                # conf preds
+                    self.priors                  # default boxes
+                )
         else:
             output = (
                 loc.view(loc.size(0), -1, 4),
@@ -235,8 +240,8 @@ def build_ssd(phase, size=300, num_classes=21):
 
 
 if __name__ == '__main__':
-    net = build_ssd("train").cuda()
+    net = build_ssd("test").cuda()
     img = torch.Tensor(1, 3, 300, 300).cuda()
     net(img)
-    net.print_params_num()  # 26.350263M
+    # net.print_params_num()  # 26.350263M
     # print(net)
