@@ -54,12 +54,12 @@ class Post_rois(Function):
             # sort all conf_scores from high to low
             sort_score, sort_index = torch.sort(conf_scores[ids[:count]], descending=True)
             # get top 100
-            sort_index = sort_index[0:100]
+            sort_index = sort_index[:self.top_k]
             scores = conf_scores[ids[:count]][sort_index]
             decoded_boxes = decoded_boxes[ids[:count]][sort_index, :]
             # change score to img index
             scores[:] = i
             # 只需要区分背景和物体，所以输出的不管物体类别的问题
-            output[i, 0, :100] = torch.cat((scores.unsqueeze(1), decoded_boxes), 1)
+            output[i, 0, ...] = torch.cat((scores.unsqueeze(1), decoded_boxes), 1)
 
         return output  # [batchsize, 1, N, 5]   5: [图像id， xmin, ymin, xmax, ymax]

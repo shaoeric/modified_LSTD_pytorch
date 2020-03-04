@@ -12,6 +12,12 @@ MEANS = (104, 117, 123)
 
 VOC_ROOT = "E:/python_project/ssd/ssdpytorch/dataset/VOC/VOCdevkit"
 
+top_k = 100
+conf_thresh = 0
+nms_thresh = 0.65
+pooled_size = 5
+
+
 # SSD300 CONFIGS
 voc = {
     'num_classes': 21,
@@ -33,7 +39,8 @@ VOC_CLASSES = (  # always index 0
     'bottle', 'bus', 'car', 'cat', 'chair',
     'cow', 'diningtable', 'dog', 'horse',
     'motorbike', 'person', 'pottedplant',
-    'sheep', 'sofa', 'train', 'tvmonitor')
+    'sheep', 'sofa', 'train', 'tvmonitor'
+)
 
 
 coco = {
