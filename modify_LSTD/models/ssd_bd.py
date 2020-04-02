@@ -1,13 +1,13 @@
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from layers.functions import PriorBox, Detect, MaskBlock
 from layers.modules import L2Norm, MultiBoxLoss, MaskGenerate, mask_vgg_layers
-from config import voc
+from config import voc, mask_thresh
 import os
 
 use_cuda = torch.cuda.is_available()
-
 
 class SSD_BD(nn.Module):
     """Single Shot Multibox Architecture
@@ -38,7 +38,7 @@ class SSD_BD(nn.Module):
             nn.Conv2d(512, 3, kernel_size=3, padding=1),  # 从512x38x38的特征图映射到3x38x38特征图
             nn.Conv2d(1, 1, kernel_size=2, stride=2)    # 1x38x38 => 1x19x19
         ])
-        self.mask_generator = MaskGenerate(3, 64, self.phase, thresh=0.5)
+        self.mask_generator = MaskGenerate(3, 64, self.phase, thresh=mask_thresh)
         self.mask_block = MaskBlock()
 
         with torch.no_grad():
@@ -105,7 +105,7 @@ class SSD_BD(nn.Module):
         for k in range(23, len(self.vgg)):
             x = self.vgg[k](x)
             if k == 23:
-                x = self.mask_block.forward(x, mask_19)
+                x = self.mask_block.forward(x, mask_19)  # 蒙版掩膜
         sources.append(x)  # [1, 1024, 19, 19]
 
         # apply extra layers and cache source layer outputs
@@ -240,7 +240,7 @@ def build_ssd(phase, size=300, num_classes=21):
 
 
 if __name__ == '__main__':
-    net = build_ssd("test").cuda()
+    net = build_ssd("train").cuda()
     img = torch.Tensor(1, 3, 300, 300).cuda()
     net(img)
     # net.print_params_num()  # 26.350263M

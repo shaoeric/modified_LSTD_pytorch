@@ -124,12 +124,13 @@ class MultiBoxLoss(nn.Module):
 if __name__ == '__main__':
     criteon = MultiBoxLoss(21,0.5, True, 0, True, 3, 0.5, False, True)
     out = (
-        torch.Tensor(1, 8732, 4).cuda(),
-        torch.Tensor(1, 8732, 21).cuda(),
-        torch.Tensor(8732, 4).cuda()
+        torch.Tensor(1, 8732, 4).requires_grad_(True).cuda(),
+        torch.Tensor(1, 8732, 21).requires_grad_(True).cuda(),
+        torch.Tensor(8732, 4).requires_grad_(True).cuda()
     )
 
     target = [
         torch.tensor([[0.3, 0.2, 0.5, 0.4, 3]]).cuda()
     ]
-    criteon(out, target)
+    loss_l, loss_c = criteon(out, target)
+    print(loss_l.requires_grad)

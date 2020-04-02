@@ -92,7 +92,7 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
     # (Bipartite Matching)
     # [1,num_objects] best prior for each ground truth
     # eg：GT有两个，与GT0最大的iou是prior100，GT1最大的iou是prior8000，best_prior_idx=[100, 8000]
-    #     best_truth_idx 则是长度为8732的二进制数组
+    #     best_truth_idx 则是长度为8732的数组
     best_prior_overlap, best_prior_idx = overlaps.max(1, keepdim=True)
     # [1,num_priors] best ground truth for each prior
     best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
@@ -108,11 +108,29 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
         best_truth_idx[best_prior_idx[j]] = j
     # best_truth_idx: [num_priors]
     matches = truths[best_truth_idx]          # Shape: [num_priors,4] 对于每一个priors的最佳gt坐标
-    conf = labels[best_truth_idx] + 1         # Shape: [num_priors]
+    conf = torch.ones(size=(matches.size(0),))        # Shape: [num_priors] 非背景label为1
     conf[best_truth_overlap < threshold] = 0  # label as background
     loc = encode(matches, priors, variances)
     loc_t[idx] = loc    # [num_priors,4] encoded offsets to learn
     conf_t[idx] = conf  # [num_priors] top class label for each prior
+
+
+def assign_label_for_rois(rois, targets, assigned_label, idx, threshold):
+    """
+    给一张图片的所有roi分配label
+    :param rois:
+    :param targets:
+    :return:
+    """
+    truth = targets[:, :-1]
+    label = targets[:, -1]
+    roi_box = rois[:, 1:]
+    overlaps = jaccard(truth, roi_box)  # [truth_num, top_k]
+    best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
+    conf = label[best_truth_idx] + 1
+    conf[best_truth_overlap < threshold] = 0
+    assigned_label[idx] = conf
+
 
 
 def encode(matched, priors, variances):

@@ -40,7 +40,7 @@ class MaskGenerate(nn.Module):
         x = self.encoder(x)  # [batchsize, 64, 144, 144]
         x = self.decoder(x)  # [batchsize, 1, 300, 300]
         # if self.phase == 'test':
-        x[x.gt(self.thresh)] = 1
+        x[x.ge(self.thresh)] = 1
         x[x.lt(self.thresh)] = 0
         return x
 
