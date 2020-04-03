@@ -4,7 +4,6 @@ from utils.box_utils import decode, nms
 from config import voc as cfg
 import cv2
 
-
 class Post_rois(Function):
     """At test time, Detect is the final layer of SSD.  Decode location preds,
     apply non-maximum suppression to location predictions based on conf
@@ -36,8 +35,7 @@ class Post_rois(Function):
         num = loc_data.size(0)  # batch size
         num_priors = prior_data.size(0)  # 8732
         output = torch.zeros(num, 1, self.top_k, 5)
-        conf_preds = conf_data.view(num, num_priors,
-                                    self.num_classes).transpose(2, 1)
+        conf_preds = conf_data.view(num, num_priors, self.num_classes).transpose(2, 1)
 
         # Decode predictions into bboxes.
         for i in range(num):
@@ -61,5 +59,4 @@ class Post_rois(Function):
             scores[:] = i
             # 只需要区分背景和物体，所以输出的不管物体类别的问题
             output[i, 0, ...] = torch.cat((scores.unsqueeze(1), decoded_boxes), 1)
-
         return output  # [batchsize, 1, N, 5]   5: [图像id， xmin, ymin, xmax, ymax]

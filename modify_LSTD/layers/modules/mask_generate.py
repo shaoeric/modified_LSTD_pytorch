@@ -37,8 +37,8 @@ class MaskGenerate(nn.Module):
         )
 
     def forward(self, x):
-        x = self.encoder(x)  # [batchsize, 64, 144, 144]
-        x = self.decoder(x)  # [batchsize, 1, 300, 300]
+        x = self.encoder(x)  # [batchsize, 64, 13, 13]
+        x = self.decoder(x)  # [batchsize, 1, 38, 38]
         # if self.phase == 'test':
         x[x.ge(self.thresh)] = 1
         x[x.lt(self.thresh)] = 0

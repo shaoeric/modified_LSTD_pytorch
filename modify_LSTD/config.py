@@ -11,12 +11,26 @@ COLORS = ((255, 0, 0, 128), (0, 255, 0, 128), (0, 0, 255, 128),
 MEANS = (104, 117, 123)
 
 VOC_ROOT = "E:/python_project/ssd/ssdpytorch/dataset/VOC/VOCdevkit"
+basenet = 'vgg16_reducedfc.pth'
 
+batch_size = 2
+num_workers = 4
+lr = 1e-3
+momentum = 0.9
+weight_decay = 5e-4
+gamma = 0.1
+pretrained_folder = os.path.join(HOME, 'weights', 'pretrained')
+save_folder = os.path.join(HOME, 'weights', 'trained')
+cuda = True
+
+num_classes = 21
+mask_thresh = 0.3
 top_k = 100
 conf_thresh = 0
 nms_thresh = 0.65
-pooled_size = 5
-
+pooled_size = 7
+conved_channel = 128
+input_size = 300
 
 # SSD300 CONFIGS
 voc = {

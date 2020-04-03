@@ -3,6 +3,7 @@ warnings.filterwarnings("ignore")
 import torch
 import torch.nn as nn
 from layers.modules import MultiBoxLoss, ClassifierLoss
+from layers.functions import MaskBlock
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
 import torch.nn.init as init
@@ -41,7 +42,7 @@ def train():
     batch_iterator = iter(dataloader)
 
     # 模型
-    lstd = build_ssd('train', config.voc['min_dim'], config.voc['num_classes'])
+    lstd = build_ssd('train', config.voc['min_dim'], 2)
     net = lstd
 
     print("loading base network...")
@@ -53,10 +54,11 @@ def train():
         net = net.cuda()
 
     optimizer = optim.SGD(net.parameters(), lr=config.lr, momentum=config.momentum, weight_decay=config.weight_decay)
-    rpn_loss = MultiBoxLoss(2, 0.5, True, 0, True, 3, 0.5, False, config.cuda)
-    mask_loss = nn.CrossEntropyLoss()
-    conf_loss = ClassifierLoss()
-
+    rpn_loss_func = MultiBoxLoss(2, 0.5, True, 0, True, 3, 0.5, False, config.cuda) # 判断是否为物体，所以
+    # 只有2类
+    mask_loss_func = nn.BCELoss()
+    conf_loss_func = ClassifierLoss()
+    bd_regulation_func = MaskBlock(is_bd=True)
     net.train()
     step_index = 0  # 用于lr的调节
     for iteration in range(config.voc['max_iter']):
@@ -70,15 +72,24 @@ def train():
             batch_iterator = iter(dataloader)
             images, targets, masks = next(batch_iterator)
 
+        masks = masks.float()
         if config.cuda:
-            images, masks = images.cuda(), masks.cuda
+            images, masks = images.cuda(), masks.cuda()
             targets = [ann.cuda() for ann in targets]
 
-        confidence, roi, rpn_out, mask_out = net(images)
-        loss_c = conf_loss.forward(roi, targets, confidence)
-        break
+        confidence, roi, rpn_out, mask_out, bd_feature = net(images)
+        loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
+        loss_c = conf_loss_func.forward(roi, targets, confidence)  # classification loss
+
+        loss_mask = mask_loss_func(mask_out.view(mask_out.size(0), -1), masks.view(masks.size(0), -1))
+
+        with torch.no_grad():
+            bd_regulation = bd_regulation_func.forward(bd_feature, masks)
+            # l1正则数值过大，达到4000多，l2正则比较平滑，调试过程中遇到的最大为80
+            bd_regulation = torch.sqrt(torch.sum(bd_regulation**2)) / torch.mul(*bd_regulation.shape[:2])
+
+        
         # optimizer.zero_grad()
-        # loss_rpn_out = rpn_loss(rpn_out, targets)
 
         # 可能需要把target转换成21列，，然后用conf_loss, 这部分的loss module要参考multiboxloss，因为num_roi 与target的个数不匹配
 

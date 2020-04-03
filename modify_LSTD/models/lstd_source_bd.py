@@ -44,8 +44,8 @@ class SSD(nn.Module):
         self.extras = nn.ModuleList(extras)
 
         self.mask_feature_map = nn.ModuleList([
-            nn.Conv2d(512, 3, kernel_size=3, padding=1),  # 从512x38x38的特征图映射到3x38x38特征图
-            nn.Conv2d(1, 1, kernel_size=2, stride=2)    # 1x38x38 => 1x19x19
+            nn.Conv2d(512, 3, kernel_size=3, padding=1, bias=False),  # 从512x38x38的特征图映射到3x38x38特征图
+            nn.Conv2d(1, 1, kernel_size=2, stride=2, bias=False)    # 1x38x38 => 1x19x19
         ])
         self.mask_generator = MaskGenerate(3, 64, self.phase, thresh=config.mask_thresh)
         self.mask_block = MaskBlock()
@@ -90,12 +90,13 @@ class SSD(nn.Module):
         for k in range(23):
             x = self.vgg[k](x)
 
+        bd_feature = x.clone()
         # 生成蒙版
-        mask_38 = None
-        if self.phase == 'train':
-            feature_map = self.mask_feature_map[0](x)
-            mask_38 = self.mask_generator(feature_map)  # [1, 1, 38, 38]  用来训练 优化loss
-            mask_19 = self.mask_feature_map[1](mask_38)  # [1, 1, 19, 19]  用来掩盖下一层的背景
+        # mask_38 = None
+        # if self.phase == 'train':
+        feature_map = self.mask_feature_map[0](x)
+        mask_38 = self.mask_generator(feature_map)  # [1, 1, 38, 38]  用来训练 优化loss
+        mask_19 = self.mask_feature_map[1](mask_38)  # [1, 1, 19, 19]  用来掩盖下一层的背景
 
         s = self.L2Norm(x)
         sources.append(s)   # [1, 512, 38, 38]
@@ -139,10 +140,10 @@ class SSD(nn.Module):
         confidence = self.classifier(roi_out)  # [batchsize, top_k, num_classes+1]
 
         if self.phase == "train":
-            return confidence, rois, rpn_output, mask_38.view(conf.size(0), -1)
+            return confidence, rois, rpn_output, mask_38, bd_feature
         else:
             confidence = self.softmax(confidence.view(conf.size(0),-1, self.num_classes))
-            return confidence, rois, None, None
+            return confidence, rois, mask_38, None
 
     def load_weights(self, base_file):
         other, ext = os.path.splitext(base_file)
