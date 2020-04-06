@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 
 
-
 class MaskGenerate(nn.Module):
     def __init__(self, channel=3, mid_channel=64, phase='train', thresh=0.5):
         """
@@ -15,23 +14,26 @@ class MaskGenerate(nn.Module):
         super(MaskGenerate, self).__init__()
         self.phase = phase
         self.thresh = thresh
-
         self.encoder = nn.Sequential(
             nn.Conv2d(channel, 16, kernel_size=3),
+            nn.BatchNorm2d(16),
             nn.ReLU(True),
             nn.Conv2d(16, 32, kernel_size=3),
             nn.ReLU(True),
             nn.MaxPool2d(2, 2),
             nn.Conv2d(32, mid_channel, kernel_size=3, dilation=2),
+            nn.BatchNorm2d(mid_channel),
             nn.ReLU(True),
         )
         self.decoder = nn.Sequential(
             nn.ConvTranspose2d(mid_channel, 32, kernel_size=3, dilation=2),
-            nn.ReLU(True),
+            nn.BatchNorm2d(32),
+            nn.Tanh(),
             nn.ConvTranspose2d(32, 32, kernel_size=2, stride=2),
-            nn.ReLU(True),
+            nn.Tanh(),
             nn.ConvTranspose2d(32, 16, kernel_size=3),
-            nn.ReLU(True),
+            nn.BatchNorm2d(16),
+            nn.Tanh(),
             nn.ConvTranspose2d(16, 1, kernel_size=3),
             nn.Sigmoid()
         )
@@ -39,16 +41,21 @@ class MaskGenerate(nn.Module):
     def forward(self, x):
         x = self.encoder(x)  # [batchsize, 64, 13, 13]
         x = self.decoder(x)  # [batchsize, 1, 38, 38]
-        # if self.phase == 'test':
-        x[x.ge(self.thresh)] = 1
-        x[x.lt(self.thresh)] = 0
         return x
 
 
 if __name__ == '__main__':
-    img = torch.Tensor(1, 3, 38, 38)
-    bd = MaskGenerate(phase="test")
+    img = torch.Tensor(1, 3, 38, 38).cuda()
+    bd = MaskGenerate(phase="train").cuda()
     out = bd(img)
+    bce = nn.BCELoss()
+    # try:
+    #     loss = bce(out.view(1, -1), img[0,0, ...].view(1, -1))
+    #     loss.backward()
+    #     print(out.max(), out.min())
+    # except:
+    #     print("except")
+    #     print(out.max(), out.min())
     print(out.shape)
     a = (out == 0).sum()
     print(a)

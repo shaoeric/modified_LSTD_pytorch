@@ -78,22 +78,27 @@ def train():
             targets = [ann.cuda() for ann in targets]
 
         confidence, roi, rpn_out, mask_out, bd_feature = net(images)
+
+        optimizer.zero_grad()
         loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
         loss_c = conf_loss_func.forward(roi, targets, confidence)  # classification loss
-
         loss_mask = mask_loss_func(mask_out.view(mask_out.size(0), -1), masks.view(masks.size(0), -1))
 
-        with torch.no_grad():
-            bd_regulation = bd_regulation_func.forward(bd_feature, masks)
-            # l1正则数值过大，达到4000多，l2正则比较平滑，调试过程中遇到的最大为80
-            bd_regulation = torch.sqrt(torch.sum(bd_regulation**2)) / torch.mul(*bd_regulation.shape[:2])
+        # bd_regulation = bd_regulation_func.forward(bd_feature, masks)
+        # # l1正则数值过大，达到4000多，l2正则比较平滑，调试过程中遇到的最大为80
+        # bd_regulation = torch.sqrt(torch.sum(bd_regulation**2)) / torch.mul(*bd_regulation.shape[:2])
 
-        
-        # optimizer.zero_grad()
+        loss = loss_loc + loss_obj + loss_c + loss_mask #+ bd_regulation
+        loss.backward()
+        optimizer.step()
 
-        # 可能需要把target转换成21列，，然后用conf_loss, 这部分的loss module要参考multiboxloss，因为num_roi 与target的个数不匹配
+        if iteration % 1 == 0:
+            print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f} || loss_c:{:.4f} || loss_mask:{:.4f}'.format(repr(iteration), loss, loss_loc, loss_obj, loss_c, loss_mask))
 
-        # 需要把target的部分，转换成01形式，有object即为1，否则为0，然后使用multiboxloss
+        if iteration != 0 and iteration % 5000 == 0:
+            print('Saving state, iter:', iteration)
+            torch.save(net.state_dict(), 'weights/lstd_source' +
+                       repr(iteration) + '.pth')
 
 
 def adjust_learning_rate(optimizer, gamma, step):

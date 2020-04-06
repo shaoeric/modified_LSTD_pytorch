@@ -120,8 +120,9 @@ class VOCDetection(Dataset):
             # to rgb
             img = img[:, :, (2, 1, 0)]
             target = np.hstack((boxes, np.expand_dims(labels, axis=1)))
-            # 如果mask为True，返回蒙版，否则返回None
-            img_mask = torch.from_numpy(img_mask).unsqueeze(0) if self.mask else img_mask
+            # 如果mask为True，返回蒙版 蒙版是对应的38x38特征图的蒙版，否则返回None
+            img_mask = cv2.resize(img_mask, (config.voc['feature_maps'][0], config.voc['feature_maps'][0]))
+            img_mask = torch.from_numpy(img_mask).unsqueeze(0) if self.mask else None
             img = torch.from_numpy(img).permute(2, 0, 1)
         return img, target, height, width, img_mask
 
@@ -200,6 +201,7 @@ if __name__ == '__main__':
     # targets:list of tensor[number_bbox, 5]
     # masks:[batchsize, 1, h, w]
     images, targets, masks = next(iterator)
-    print(targets)
+    print(images.requires_grad)  # False
+    # print(targets)
 
 
