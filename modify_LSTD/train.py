@@ -49,7 +49,7 @@ def train():
     net.vgg.load_state_dict(torch.load(os.path.join(config.pretrained_folder, config.basenet)))
 
     if config.cuda:
-        net = torch.nn.DataParallel(net)
+        net = torch.nn.DataParallel(net, [0,1])
         cudnn.benchmark = True
         net = net.cuda()
 

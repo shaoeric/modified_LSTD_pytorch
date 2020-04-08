@@ -14,6 +14,7 @@ class MaskGenerate(nn.Module):
         super(MaskGenerate, self).__init__()
         self.phase = phase
         self.thresh = thresh
+        self.bn = nn.BatchNorm2d(channel)
         self.encoder = nn.Sequential(
             nn.Conv2d(channel, 16, kernel_size=3),
             nn.BatchNorm2d(16),
@@ -39,23 +40,28 @@ class MaskGenerate(nn.Module):
         )
 
     def forward(self, x):
+        x = torch.where(torch.isnan(x), torch.tensor(0.), x)
+        x = self.bn(x)
         x = self.encoder(x)  # [batchsize, 64, 13, 13]
         x = self.decoder(x)  # [batchsize, 1, 38, 38]
         return x
 
 
 if __name__ == '__main__':
-    img = torch.Tensor(1, 3, 38, 38).cuda()
-    bd = MaskGenerate(phase="train").cuda()
-    out = bd(img)
-    bce = nn.BCELoss()
-    # try:
-    #     loss = bce(out.view(1, -1), img[0,0, ...].view(1, -1))
-    #     loss.backward()
-    #     print(out.max(), out.min())
-    # except:
-    #     print("except")
-    #     print(out.max(), out.min())
-    print(out.shape)
-    a = (out == 0).sum()
-    print(a)
+    while True:
+        img = torch.Tensor(1, 3, 38, 38)
+        bd = MaskGenerate(phase="train")
+        out = bd(img)
+        bce = nn.BCELoss()
+        try:
+            loss = bce(out.view(1, -1), img[0,0, ...].view(1, -1))
+            loss.backward()
+            print(img.max(), img.min(), out.max(), out.min(), loss)
+        except:
+            print("except")
+            print(out.max(), out.min())
+            break
+    # import numpy as np
+    # x = torch.tensor(np.nan)
+    # x = torch.where(torch.isnan(x), torch.tensor(0.), x)
+    # print(x)
