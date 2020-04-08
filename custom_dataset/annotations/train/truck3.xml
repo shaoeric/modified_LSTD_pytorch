@@ -1,0 +1,26 @@
+<annotation verified="yes">
+	<folder>train</folder>
+	<filename>truck3.jpg</filename>
+	<path>E:\python_project\ssd\毕业设计\custom_dataset\train\truck3.jpg</path>
+	<source>
+		<database>Unknown</database>
+	</source>
+	<size>
+		<width>220</width>
+		<height>165</height>
+		<depth>3</depth>
+	</size>
+	<segmented>0</segmented>
+	<object>
+		<name>truck</name>
+		<pose>Unspecified</pose>
+		<truncated>0</truncated>
+		<difficult>0</difficult>
+		<bndbox>
+			<xmin>29</xmin>
+			<ymin>54</ymin>
+			<xmax>158</xmax>
+			<ymax>146</ymax>
+		</bndbox>
+	</object>
+</annotation>

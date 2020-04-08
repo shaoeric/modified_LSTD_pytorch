@@ -1,0 +1,26 @@
+<annotation verified="yes">
+	<folder>train</folder>
+	<filename>bear11.jpg</filename>
+	<path>E:\python_project\ssd\毕业设计\custom_dataset\train\bear11.jpg</path>
+	<source>
+		<database>Unknown</database>
+	</source>
+	<size>
+		<width>424</width>
+		<height>640</height>
+		<depth>3</depth>
+	</size>
+	<segmented>0</segmented>
+	<object>
+		<name>bear</name>
+		<pose>Unspecified</pose>
+		<truncated>0</truncated>
+		<difficult>0</difficult>
+		<bndbox>
+			<xmin>94</xmin>
+			<ymin>162</ymin>
+			<xmax>338</xmax>
+			<ymax>454</ymax>
+		</bndbox>
+	</object>
+</annotation>
