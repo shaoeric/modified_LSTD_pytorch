@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+from config import cuda
 
 class MaskGenerate(nn.Module):
     def __init__(self, channel=3, mid_channel=64, phase='train', thresh=0.5):
@@ -40,7 +40,9 @@ class MaskGenerate(nn.Module):
         )
 
     def forward(self, x):
-        x = torch.where(torch.isnan(x), torch.tensor(0.), x)
+        value = torch.tensor(0.)
+        value = value.cuda() if cuda else value
+        x = torch.where(torch.isnan(x), value, x)
         x = self.bn(x)
         x = self.encoder(x)  # [batchsize, 64, 13, 13]
         x = self.decoder(x)  # [batchsize, 1, 38, 38]

@@ -49,7 +49,7 @@ def train():
     net.vgg.load_state_dict(torch.load(os.path.join(config.pretrained_folder, config.basenet)))
 
     if config.cuda:
-        net = torch.nn.DataParallel(net, [0,1])
+        net = torch.nn.DataParallel(net, [0])
         cudnn.benchmark = True
         net = net.cuda()
 
@@ -77,25 +77,27 @@ def train():
             images, masks = images.cuda(), masks.cuda()
             targets = [ann.cuda() for ann in targets]
 
-        confidence, roi, rpn_out, mask_out, bd_feature = net(images)
+        confidence, roi, rpn_out = net(images)
 
-        optimizer.zero_grad()
+
         loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
         loss_c = conf_loss_func.forward(roi, targets, confidence)  # classification loss
-        loss_mask = mask_loss_func(mask_out.view(mask_out.size(0), -1), masks.view(masks.size(0), -1))
+        # loss_mask = mask_loss_func(mask_out.view(mask_out.size(0), -1), masks.view(masks.size(0), -1))
 
         # bd_regulation = bd_regulation_func.forward(bd_feature, masks)
         # # l1正则数值过大，达到4000多，l2正则比较平滑，调试过程中遇到的最大为80
         # bd_regulation = torch.sqrt(torch.sum(bd_regulation**2)) / torch.mul(*bd_regulation.shape[:2])
-
-        loss = loss_loc + loss_obj + loss_c + loss_mask #+ bd_regulation
+        loss = loss_loc + loss_obj + 4*loss_c # #+ bd_regulation
+        # loss = loss_obj + loss_c # #+ bd_regulation
         loss.backward()
+
         optimizer.step()
+        optimizer.zero_grad()
 
-        if iteration % 1 == 0:
-            print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f} || loss_c:{:.4f} || loss_mask:{:.4f}'.format(repr(iteration), loss, loss_loc, loss_obj, loss_c, loss_mask))
+        if iteration % 10 == 0:
+            print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f} || loss_c:{:.4f} '.format(repr(iteration), loss, loss_loc, loss_obj, loss_c))
 
-        if iteration != 0 and iteration % 5000 == 0:
+        if iteration != 0 and iteration % 3000 == 0:
             print('Saving state, iter:', iteration)
             torch.save(net.state_dict(), 'weights/lstd_source' +
                        repr(iteration) + '.pth')

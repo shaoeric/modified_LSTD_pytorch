@@ -6,7 +6,7 @@ from layers.modules import L2Norm, MultiBoxLoss, RoIPooling, Classifier, MaskGen
 import config
 import os
 from layers.functions.post_rois import Post_rois
-
+from copy import deepcopy
 
 use_cuda = torch.cuda.is_available()
 
@@ -29,7 +29,7 @@ class SSD(nn.Module):
     def __init__(self, phase, base, extras, head, extras_lstd, num_classes):
         super(SSD, self).__init__()
         self.phase = phase
-        self.num_classes = num_classes
+        self.num_classes = num_classes  # objectness 所以是2
         self.cfg = config.voc
         self.priorbox = PriorBox(self.cfg)
 
@@ -43,12 +43,12 @@ class SSD(nn.Module):
         self.L2Norm = L2Norm(512, 20)
         self.extras = nn.ModuleList(extras)
 
-        self.mask_feature_map = nn.ModuleList([
-            nn.Conv2d(512, 3, kernel_size=3, padding=1, bias=False),  # 从512x38x38的特征图映射到3x38x38特征图
-            nn.Conv2d(1, 1, kernel_size=2, stride=2, bias=False)    # 1x38x38 => 1x19x19
-        ])
-        self.mask_generator = MaskGenerate(3, 64, self.phase, thresh=config.mask_thresh)
-        self.mask_block = MaskBlock()
+        # self.mask_feature_map = nn.ModuleList([
+        #     nn.Conv2d(512, 3, kernel_size=3, padding=1, bias=False),  # 从512x38x38的特征图映射到3x38x38特征图
+        #     nn.Conv2d(1, 1, kernel_size=2, stride=2, bias=False)    # 1x38x38 => 1x19x19
+        # ])
+        # self.mask_generator = MaskGenerate(3, 64, self.phase, thresh=config.mask_thresh)
+        # self.mask_block = MaskBlock()
 
         self.loc = nn.ModuleList(head[0])
         self.conf = nn.ModuleList(head[1])
@@ -58,7 +58,7 @@ class SSD(nn.Module):
         self.roi_pool = RoIPooling(pooled_size=config.pooled_size, img_size=self.size, conved_size=config.pooled_size, conved_channels=config.conved_channel)
         self.classifier = Classifier(num_classes=config.num_classes)
         if use_cuda:
-            self.mask_generator = self.mask_generator.cuda()
+            # self.mask_generator = self.mask_generator.cuda()
             self.roi_pool = self.roi_pool.cuda()
             self.classifier = self.classifier.cuda()
 
@@ -94,9 +94,9 @@ class SSD(nn.Module):
         # 生成蒙版
         # mask_38 = None
         # if self.phase == 'train':
-        feature_map = self.mask_feature_map[0](x)
-        mask_38 = self.mask_generator(feature_map)  # [1, 1, 38, 38]  用来训练 优化loss
-        mask_19 = self.mask_feature_map[1](mask_38)  # [1, 1, 19, 19]  用来掩盖下一层的背景
+        # feature_map = self.mask_feature_map[0](x)
+        # mask_38 = self.mask_generator(feature_map)  # [1, 1, 38, 38]  用来训练 优化loss
+        # mask_19 = self.mask_feature_map[1](mask_38)  # [1, 1, 19, 19]  用来掩盖下一层的背景
 
         s = self.L2Norm(x)
         sources.append(s)   # [1, 512, 38, 38]
@@ -104,8 +104,8 @@ class SSD(nn.Module):
         # apply vgg up to fc7
         for k in range(23, len(self.vgg)):
             x = self.vgg[k](x)
-            if k == 23 and self.phase == 'train':
-                x = self.mask_block.forward(x, mask_19)  # 蒙版掩膜
+            # if k == 23 and self.phase == 'train':
+                # x = self.mask_block.forward(x, mask_19)  # 蒙版掩膜
 
         sources.append(x)   # [1, 1024, 19, 19]
 
@@ -132,7 +132,6 @@ class SSD(nn.Module):
         )
         with torch.no_grad():
             rois = self.post_rois.forward(img, *rpn_output)  # rois.size (batch,1, top_k,5)  scaled[0, 1]
-
         #  faster rcnn roi pooling，
         roi_out = self.roi_pool(rois, sources[1])  # [batch, top_k, 128, 7, 7]
 
@@ -140,10 +139,10 @@ class SSD(nn.Module):
         confidence = self.classifier(roi_out)  # [batchsize, top_k, num_classes+1]
 
         if self.phase == "train":
-            return confidence, rois, rpn_output, mask_38, bd_feature
+            return confidence, rois, rpn_output, #mask_38, bd_feature
         else:
-            confidence = self.softmax(confidence.view(conf.size(0),-1, self.num_classes))
-            return confidence, rois, mask_38, None
+            confidence = self.softmax(confidence.view(conf.size(0),-1, config.num_classes))
+            return confidence, rois, #mask_38, None
 
     def load_weights(self, base_file):
         other, ext = os.path.splitext(base_file)
@@ -236,6 +235,8 @@ def multibox(vgg, extra_layers, cfg, base_classes):
                                  * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                   * base_classes, kernel_size=3, padding=1)]
+    loc_layers += [nn.ReLU(True), nn.BatchNorm2d(cfg[k])]
+    conf_layers += [nn.ReLU(True), nn.BatchNorm2d(cfg[k])]
     return vgg, extra_layers, (loc_layers, conf_layers)
 
 

@@ -37,26 +37,43 @@ class Post_rois(Function):
         output = torch.zeros(num, 1, self.top_k, 5)
         conf_preds = conf_data.view(num, num_priors, self.num_classes).transpose(2, 1)
 
-        # Decode predictions into bboxes.
         for i in range(num):
-            assert prior_data.cpu().numpy().all() >= 0
-            prior_data = prior_data.cuda(loc_data[i].get_device())
             decoded_boxes = decode(loc_data[i], prior_data, self.variance)
-
             # For each class, perform nms
             conf_scores = conf_preds[i][1].clone()
-            # filter
-            # apply nms
-            ids, count = nms(decoded_boxes, conf_scores, self.nms_thresh, 1000)
-
-            # sort all conf_scores from high to low
-            sort_score, sort_index = torch.sort(conf_scores[ids[:count]], descending=True)
-            # get top 100
-            sort_index = sort_index[:self.top_k]
-            scores = conf_scores[ids[:count]][sort_index]
-            decoded_boxes = decoded_boxes[ids[:count]][sort_index, :]
-            # change score to img index
+            c_mask = conf_scores.gt(self.conf_thresh)
+            scores = conf_scores[c_mask]
+            if scores.size(0) == 0:
+                continue
+            l_mask = c_mask.unsqueeze(1).expand_as(decoded_boxes)
+            boxes = decoded_boxes[l_mask].view(-1, 4)
+            ids, count = nms(boxes, scores, self.nms_thresh, self.top_k)
             scores[:] = i
-            # 只需要区分背景和物体，所以输出的不管物体类别的问题
-            output[i, 0, ...] = torch.cat((scores.unsqueeze(1), decoded_boxes), 1)
+            output[i, 0, :count] = torch.cat((scores[ids[:count]].unsqueeze(1),
+                               boxes[ids[:count]]), 1)
+
+        # # Decode predictions into bboxes.
+        # for i in range(num):
+        #     assert prior_data.cpu().numpy().all() >= 0
+        #     prior_data = prior_data.cuda(loc_data[i].get_device())
+        #     decoded_boxes = decode(loc_data[i], prior_data, self.variance)
+        #
+        #     # For each class, perform nms
+        #     conf_scores = conf_preds[i][1].clone()
+        #     # filter
+        #     # apply nms
+        #     ids, count = nms(decoded_boxes, conf_scores, self.nms_thresh)
+        #
+        #     # sort all conf_scores from high to low
+        #     sort_score, sort_index = torch.sort(conf_scores[ids[:count]], descending=True)
+        #     # get top 100
+        #     sort_index = sort_index[:self.top_k]
+        #     scores = conf_scores[ids[:count]][sort_index]
+        #     decoded_boxes = decoded_boxes[ids[:count]][sort_index, :]
+        #     # change score to img index
+        #     scores[:] = i
+        #     # 只需要区分背景和物体，所以输出的不管物体类别的问题
+        #     output[i, 0, ...] = torch.cat((scores.unsqueeze(1), decoded_boxes), 1)
+
+
         return output  # [batchsize, 1, N, 5]   5: [图像id， xmin, ymin, xmax, ymax]

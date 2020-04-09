@@ -19,14 +19,15 @@ class RoIPooling(nn.Module):
             nn.ReLU(True)
         )
 
-    def forward(self, rois, features):
+    def forward(self, roi_proposal, features):
         """
         要根据原图宽高和300x300比例转换.但转换完后，原图的尺寸被约掉了，所以还是乘以300，
         为了映射到特征图上，还要除以16
-        :param rois:  rpn经过转换后的roi区域 [batchsize, num_rois, 5]  5:[图像id，xmin,ymin,xmax,ymax]
+        :param roi_proposal:  rpn经过转换后的roi区域 [batchsize,1, num_rois, 5]  5:[图像id，xmin,ymin,xmax,ymax]
         :param features:  vgg提取的特征图，[batchsize, 1024, 19, 19]
         :return: output: [batchsize, num_rois, 256, 2, 2]
         """
+        rois = roi_proposal.clone()
         num_rois = rois.size(2)
         rois = rois.requires_grad_(False)
         rois = rois.reshape(-1,  5)
@@ -38,13 +39,13 @@ class RoIPooling(nn.Module):
         for i in range(num_rois):
             roi = rois[i]
             img_idx = roi[0]
-            x_min, y_min, x_max, y_max = roi[1:].clamp(min=1, max=18)
+            x_min, y_min, x_max, y_max = roi[1:].clamp(min=1, max=16)
             x_min = (x_min - 1) if x_max == x_min else x_min
             y_min = (y_min - 1) if y_max == y_min else y_min
             out = features.narrow(0, img_idx, 1)[..., y_min: y_max+1, x_min: x_max+1]
-
             out = self.pool(out)  # [1, 1024, 7, 7]
             out = self.conv(out)  # [1, 256, 7, 7]
+
             output[img_idx, i, ...] = out
 
         return output  # [2, 2, 256, 7, 7]

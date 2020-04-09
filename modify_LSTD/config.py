@@ -3,6 +3,7 @@ import os.path
 import os
 # gets home dir cross platform
 HOME = os.path.dirname(__file__)
+import torch
 
 # for making bounding boxes pretty
 COLORS = ((255, 0, 0, 128), (0, 255, 0, 128), (0, 0, 255, 128),
@@ -13,15 +14,15 @@ MEANS = (104, 117, 123)
 VOC_ROOT = "E:/python_project/ssd/ssdpytorch/dataset/VOC/VOCdevkit"
 basenet = 'vgg16_reducedfc.pth'
 
-batch_size = 2
+batch_size = 1
 num_workers = 4
-lr = 1e-3
+lr = 1e-4
 momentum = 0.9
-weight_decay = 5e-4
+weight_decay = 5e-5
 gamma = 0.1
 pretrained_folder = os.path.join(HOME, 'weights', 'pretrained')
 save_folder = os.path.join(HOME, 'weights', 'trained')
-cuda = True
+cuda = True if torch.cuda.is_available() else False
 
 num_classes = 21
 mask_thresh = 0.3
@@ -35,7 +36,7 @@ input_size = 300
 # SSD300 CONFIGS
 voc = {
     'num_classes': 21,
-    'lr_steps': (80000, 100000, 120000),
+    'lr_steps': (8000, 12000, 20000),
     'max_iter': 120000,
     'feature_maps': [38, 19, 10, 5, 3, 1],
     'min_dim': 300,
