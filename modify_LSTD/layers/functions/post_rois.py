@@ -3,6 +3,8 @@ from torch.autograd import Function
 from utils.box_utils import decode, nms
 from config import voc as cfg
 import cv2
+import torch.nn as nn
+
 
 class Post_rois(Function):
     """At test time, Detect is the final layer of SSD.  Decode location preds,
@@ -21,6 +23,7 @@ class Post_rois(Function):
             raise ValueError('nms_threshold must be non negative.')
         self.conf_thresh = conf_thresh
         self.variance = cfg['variance']
+        self.softmax = nn.Softmax(dim=-1)
 
     def forward(self, img, loc_data, conf_data, prior_data):
         """
@@ -35,6 +38,7 @@ class Post_rois(Function):
         num = loc_data.size(0)  # batch size
         num_priors = prior_data.size(0)  # 8732
         output = torch.zeros(num, 1, self.top_k, 5)
+        conf_data = self.softmax(conf_data)
         conf_preds = conf_data.view(num, num_priors, self.num_classes).transpose(2, 1)
 
         for i in range(num):
@@ -51,7 +55,10 @@ class Post_rois(Function):
             scores[:] = i
             output[i, 0, :count] = torch.cat((scores[ids[:count]].unsqueeze(1),
                                boxes[ids[:count]]), 1)
-
+        flt = output.contiguous().view(num, -1, 5)
+        _, idx = flt[:, :, 0].sort(1, descending=True)
+        _, rank = idx.sort(1)
+        flt[(rank < self.top_k).unsqueeze(-1).expand_as(flt)].fill_(0)
         # # Decode predictions into bboxes.
         # for i in range(num):
         #     assert prior_data.cpu().numpy().all() >= 0

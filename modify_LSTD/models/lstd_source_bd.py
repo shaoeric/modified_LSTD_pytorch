@@ -54,7 +54,7 @@ class SSD(nn.Module):
         self.conf = nn.ModuleList(head[1])
 
         # faster rcnn part
-        self.post_rois = Post_rois(self.num_classes, 0, config.top_k, config.conf_thresh, config.nms_thresh) # 背景+前景只有2类
+        self.post_rois = Post_rois(self.num_classes, 0, config.top_k * 2, config.conf_thresh, config.nms_thresh) # 背景+前景只有2类
         self.roi_pool = RoIPooling(pooled_size=config.pooled_size, img_size=self.size, conved_size=config.pooled_size, conved_channels=config.conved_channel)
         self.classifier = Classifier(num_classes=config.num_classes)
         if use_cuda:
@@ -128,7 +128,7 @@ class SSD(nn.Module):
         rpn_output = (
             loc.view(loc.size(0), -1, 4),
             conf.view(conf.size(0), -1, self.num_classes),  # [batch, 8732, 2]
-            self.priors
+            self.priors 
         )
         with torch.no_grad():
             rois = self.post_rois.forward(img, *rpn_output)  # rois.size (batch,1, top_k,5)  scaled[0, 1]
@@ -235,8 +235,6 @@ def multibox(vgg, extra_layers, cfg, base_classes):
                                  * 4, kernel_size=3, padding=1)]
         conf_layers += [nn.Conv2d(v.out_channels, cfg[k]
                                   * base_classes, kernel_size=3, padding=1)]
-    loc_layers += [nn.ReLU(True), nn.BatchNorm2d(cfg[k])]
-    conf_layers += [nn.ReLU(True), nn.BatchNorm2d(cfg[k])]
     return vgg, extra_layers, (loc_layers, conf_layers)
 
 

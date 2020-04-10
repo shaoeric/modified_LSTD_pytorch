@@ -15,6 +15,7 @@ def cv2_demo(net, transform):
         height, width = frame.shape[:2]
         x = torch.from_numpy(transform(frame)[0]).permute(2, 0, 1).cuda()
         x = torch.tensor(x.unsqueeze(0))
+        scale = torch.Tensor([width, height, width, height]).cuda()
         with torch.no_grad():
             confidence, rois = net(x)  # forward pass
 
@@ -29,7 +30,7 @@ def cv2_demo(net, transform):
         for i in range(output.size(0)):
             j = 0
             while output[i, j, 0] >= 0.5:
-                pt = (output[i,j, 1:] * 16).cpu().numpy()
+                pt = (output[i, j, 1:] * scale).cpu().numpy()
                 cv2.rectangle(frame,
                               (int(pt[0]), int(pt[1])),
                               (int(pt[2]), int(pt[3])),
@@ -39,16 +40,16 @@ def cv2_demo(net, transform):
                 j += 1
         return frame
 
-    img = cv2.imread("E:\python_project\ssd\ssdpytorch\dataset\VOC\VOCdevkit\VOC2012\JPEGImages\\2008_006833.jpg")
+    img = cv2.imread("E:\\000000000785.jpg")
     frame = predict(img)
     cv2.imshow("", frame)
     cv2.waitKey(0)
 
-# weights = torch.load("./weights/trained/lstd_source30000.pth")
+
+weights = torch.load("./weights/trained/lstd_source114000.pth")
 net = build_ssd('test', 300, 2).cuda()
 net = nn.DataParallel(net, device_ids=[0])
 # net.load_state_dict(weights)
 transform = BaseTransform(input_size, (104/256.0, 117/256.0, 123/256.0))
-net.eval()
 
 cv2_demo(net.eval(), transform)

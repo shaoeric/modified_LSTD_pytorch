@@ -54,4 +54,9 @@ class Detect(Function):
                 # ids是针对scores的[n]而言的，而不是对[8732]的
                 ids, count = nms(boxes, scores, self.nms_thresh, self.top_k)
                 output[i, cl, :count] = torch.cat((scores[ids[:count]].unsqueeze(1), boxes[ids[:count]]), 1)
+        flt = output.contiguous().view(num, -1, 5)
+        _, idx = flt[:, :, 0].sort(1, descending=True)
+        _, rank = idx.sort(1)
+        flt[(rank < self.top_k).unsqueeze(-1).expand_as(flt)].fill_(0)
+
         return output

@@ -11,13 +11,10 @@ class Classifier(nn.Module):
         super(Classifier, self).__init__()
         self.num_classes = num_classes
         self.classifier = nn.Sequential(
-            nn.Linear(config.conved_channel * config.pooled_size **2, 256),
+            nn.Linear(config.conved_channel * config.pooled_size **2, 128),
             nn.ReLU(True),
-            nn.Dropout(0.2),
-            nn.Linear(256, 64),
-            nn.ReLU(True),
-            nn.Dropout(0.2),
-            nn.Linear(64, self.num_classes)
+            nn.Dropout(0.25),
+            nn.Linear(128, self.num_classes)
         )
 
     def forward(self, x):
