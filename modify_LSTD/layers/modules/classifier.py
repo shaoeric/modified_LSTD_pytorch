@@ -11,14 +11,14 @@ class Classifier(nn.Module):
         super(Classifier, self).__init__()
         self.num_classes = num_classes
         self.classifier = nn.Sequential(
-            nn.Linear(config.conved_channel * config.pooled_size **2, 128),
+            nn.Linear(config.conved_channel//8 * config.pooled_size **2, 64),
             nn.ReLU(True),
             nn.Dropout(0.25),
-            nn.Linear(128, self.num_classes)
+            nn.Linear(64, self.num_classes)
         )
 
     def forward(self, x):
-        # x: [batch, num_roi, 128, 7, 7]
+        # x: [batch, num_roi, 16, 7, 7]
         batchsize = x.size(0)
         num_roi = x.size(1)
         x = x.view(batchsize, num_roi, -1)

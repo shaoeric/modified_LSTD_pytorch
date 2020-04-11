@@ -13,15 +13,13 @@ class ClassifierLoss(nn.Module):
     def forward(self, rois, targets, prediction):
         """
 
-        :param rois: tensor [batchsize, 1, top_k, 5]
+        :param rois: scaled tensor [batchsize, 1, top_k, 5]
         :param targets: list of tensors
         :param prediction: tensor [batchsize, top_k, num_classes+1]
         :return:
         """
         batchsize = rois.size(0)
         num_rois = rois.size(2)
-        rois[:, :, :, 1:] = rois[:, :, :, 1:] / config.input_size * 16
-        rois.clamp_(min=0., max=1.)
         assign_labels = torch.zeros(size=(batchsize, num_rois)).long()
         # 给每一个roi按照与true的iou最大分配标签，如果iou小于阈值则让其为0背景
         for idx in range(batchsize):

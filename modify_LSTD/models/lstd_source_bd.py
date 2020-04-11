@@ -5,7 +5,7 @@ from layers.functions import PriorBox, Detect, MaskBlock
 from layers.modules import L2Norm, MultiBoxLoss, RoIPooling, Classifier, MaskGenerate
 import config
 import os
-from layers.functions.post_rois import Post_rois
+from layers.modules import Post_rois
 from copy import deepcopy
 
 use_cuda = torch.cuda.is_available()
@@ -54,7 +54,7 @@ class SSD(nn.Module):
         self.conf = nn.ModuleList(head[1])
 
         # faster rcnn part
-        self.post_rois = Post_rois(self.num_classes, 0, config.top_k * 2, config.conf_thresh, config.nms_thresh) # 背景+前景只有2类
+        self.post_rois = Post_rois(self.num_classes, 0, 1000, config.conf_thresh) # 背景+前景只有2类
         self.roi_pool = RoIPooling(pooled_size=config.pooled_size, img_size=self.size, conved_size=config.pooled_size, conved_channels=config.conved_channel)
         self.classifier = Classifier(num_classes=config.num_classes)
         if use_cuda:
@@ -130,11 +130,11 @@ class SSD(nn.Module):
             conf.view(conf.size(0), -1, self.num_classes),  # [batch, 8732, 2]
             self.priors 
         )
-        with torch.no_grad():
-            rois = self.post_rois.forward(img, *rpn_output)  # rois.size (batch,1, top_k,5)  scaled[0, 1]
+        # with torch.no_grad():
+        rois = self.post_rois.forward(img, *rpn_output)  # rois.size (batch,1, top_k,5)  scaled[0, 1]
+
         #  faster rcnn roi pooling，
         roi_out = self.roi_pool(rois, sources[1])  # [batch, top_k, 128, 7, 7]
-
         # 分类输出（带背景）
         confidence = self.classifier(roi_out)  # [batchsize, top_k, num_classes+1]
 

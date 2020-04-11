@@ -16,6 +16,9 @@ class RoIPooling(nn.Module):
             nn.ReLU(True),
             nn.Conv2d(256, self.conved_channels, kernel_size=3, padding=1, stride=1),
             nn.BatchNorm2d(self.conved_channels),
+            nn.ReLU(True),
+            nn.Conv2d(self.conved_channels, self.conved_channels//8, kernel_size=1, bias=False),
+            nn.BatchNorm2d(self.conved_channels//8),
             nn.ReLU(True)
         )
 
@@ -29,12 +32,11 @@ class RoIPooling(nn.Module):
         """
         rois = roi_proposal.clone()
         num_rois = rois.size(2)
-        rois = rois.requires_grad_(False)
         rois = rois.reshape(-1,  5)
         rois[:, 1:] = rois[:,  1:] * self.img_size / 16
         rois = rois.long()
 
-        output = torch.zeros(size=(features.size(0), num_rois, self.conved_channels, self.conved_size, self.conved_size)).type(features.type())
+        output = torch.zeros(size=(features.size(0), num_rois, self.conved_channels//8, self.conved_size, self.conved_size)).type(features.type())
 
         for i in range(num_rois):
             roi = rois[i]
@@ -48,4 +50,4 @@ class RoIPooling(nn.Module):
 
             output[img_idx, i, ...] = out
 
-        return output  # [2, 2, 256, 7, 7]
+        return output  # [batch, top_k, 128, 7, 7]

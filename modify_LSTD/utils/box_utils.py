@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import torch
 
+# torch.set_printoptions(threshold=torch.tensor(float('inf')))
+
 
 def point_form(boxes):
     """ Convert prior_boxes to (xmin, ymin, xmax, ymax)
@@ -108,11 +110,15 @@ def match(threshold, truths, priors, variances, labels, loc_t, conf_t, idx):
         best_truth_idx[best_prior_idx[j]] = j
     # best_truth_idx: [num_priors]
     matches = truths[best_truth_idx]          # Shape: [num_priors,4] 对于每一个priors的最佳gt坐标
-    conf = torch.ones(size=(matches.size(0),))        # Shape: [num_priors] 非背景label为1
+
+    conf = labels[best_truth_idx] + 1        # Shape: [num_priors] 非背景label为1
     conf[best_truth_overlap < threshold] = 0  # label as background
+    conf[conf.gt(0)] = 1
+
     loc = encode(matches, priors, variances)
     loc_t[idx] = loc    # [num_priors,4] encoded offsets to learn
     conf_t[idx] = conf  # [num_priors] top class label for each prior
+
 
 
 def assign_label_for_rois(rois, targets, assigned_label, idx, threshold):
@@ -130,7 +136,6 @@ def assign_label_for_rois(rois, targets, assigned_label, idx, threshold):
     conf = label[best_truth_idx] + 1
     conf[best_truth_overlap < threshold] = 0
     assigned_label[idx] = conf
-
 
 
 def encode(matched, priors, variances):
@@ -169,7 +174,8 @@ def decode(loc, priors, variances):
     Return:
         decoded bounding box predictions
     """
-    priors = priors.cuda() if loc.is_cuda else priors
+    # priors = priors.t if loc.is_cuda else priors
+    priors = priors.to(loc.device)
     boxes = torch.cat((
         priors[:, :2] + loc[:, :2] * variances[0] * priors[:, 2:],
         priors[:, 2:] * torch.exp(loc[:, 2:] * variances[1])), 1)
