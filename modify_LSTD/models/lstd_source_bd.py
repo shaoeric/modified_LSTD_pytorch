@@ -131,7 +131,7 @@ class SSD(nn.Module):
             self.priors 
         )
         # with torch.no_grad():
-        rois = self.post_rois.forward(img, *rpn_output)  # rois.size (batch,1, top_k,5)  scaled[0, 1]
+        rois, objectness = self.post_rois.forward(img, *rpn_output)  # rois.size (batch,1, top_k,5)  scaled[0, 1], objectness:(batch, 1, top_k, 1)
 
         #  faster rcnn roi pooling，
         roi_out = self.roi_pool(rois, sources[1])  # [batch, top_k, 128, 7, 7]
@@ -142,7 +142,8 @@ class SSD(nn.Module):
             return confidence, rois, rpn_output, #mask_38, bd_feature
         else:
             confidence = self.softmax(confidence.view(conf.size(0),-1, config.num_classes))
-            return confidence, rois, #mask_38, None
+            objectness = F.softmax(rpn_output[1], dim=-1)
+            return confidence, rois, objectness #mask_38, None
 
     def load_weights(self, base_file):
         other, ext = os.path.splitext(base_file)

@@ -57,7 +57,7 @@ def train():
     rpn_loss_func = MultiBoxLoss(2, 0.5, True, 0, True, 3, 0.5, False, config.cuda) # 判断是否为物体，所以
     # 只有2类
     mask_loss_func = nn.BCELoss()
-    conf_loss_func = ClassifierLoss()
+    conf_loss_func = ClassifierLoss(num_class=config.num_classes)
     bd_regulation_func = MaskBlock(is_bd=True)
     net.train()
     step_index = 0  # 用于lr的调节
@@ -71,7 +71,7 @@ def train():
         except StopIteration as e:
             batch_iterator = iter(dataloader)
             images, targets, masks = next(batch_iterator)
-
+        print("targets",targets)
         masks = masks.float()
         if config.cuda:
             images, masks = images.cuda(), masks.cuda()
@@ -87,14 +87,14 @@ def train():
         # bd_regulation = bd_regulation_func.forward(bd_feature, masks)
         # # l1正则数值过大，达到4000多，l2正则比较平滑，调试过程中遇到的最大为80
         # bd_regulation = torch.sqrt(torch.sum(bd_regulation**2)) / torch.mul(*bd_regulation.shape[:2])
-        loss = loss_loc + loss_obj + 4*loss_c # #+ bd_regulation
+        loss = 2 * loss_loc + 4 * loss_obj + loss_c # #+ bd_regulation
         # loss = loss_obj + loss_c # #+ bd_regulation
         loss.backward()
 
         optimizer.step()
         optimizer.zero_grad()
 
-        if iteration % 10 == 0:
+        if iteration % 1 == 0:
             print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f} || loss_c:{:.4f} '.format(repr(iteration), loss, loss_loc, loss_obj, loss_c))
 
         if iteration != 0 and iteration % 3000 == 0:

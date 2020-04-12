@@ -36,6 +36,7 @@ class Post_rois(nn.Module):
         num = loc_data.size(0)  # batch size
         num_priors = prior_data.size(0)  # 8732
         output = torch.zeros(num, 1, self.top_k, 5)
+        objectness = torch.zeros(num, 1, self.top_k, 1)
         conf_data = self.softmax(conf_data)
         conf_preds = conf_data.view(num, num_priors, self.num_classes).transpose(2, 1)
 
@@ -49,8 +50,9 @@ class Post_rois(nn.Module):
                 continue
             l_mask = c_mask.unsqueeze(1).expand_as(decoded_boxes)
             boxes = decoded_boxes[l_mask].view(-1, 4).clamp_(0, 1)
-            keep = torchvision.ops.nms(boxes, scores, 0.4)
+            keep = torchvision.ops.nms(boxes, scores, 0.7)
+            objectness[i, 0, :min(self.top_k, keep.size(0))] = scores[keep[:self.top_k]].unsqueeze(1)
             scores[:] = i
             output[i, 0, :min(self.top_k, keep.size(0))] = torch.cat((scores[keep[:self.top_k]].unsqueeze(1), boxes[keep[:self.top_k]]), 1)
 
-        return output  # [batchsize, 1, N, 5]   5: [图像id， xmin, ymin, xmax, ymax]
+        return output, objectness  # [batchsize, 1, N, 5]   5: [图像id， xmin, ymin, xmax, ymax]

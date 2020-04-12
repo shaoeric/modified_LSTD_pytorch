@@ -62,6 +62,7 @@ class MultiBoxLoss(nn.Module):
         num_priors = (priors.size(0))  # 8732
         num_classes = self.num_classes
 
+        conf_data = F.softmax(conf_data, dim=-1)
         # print(loc_data.shape) # [1, 8732, 4]
         # print(conf_data.shape)  # [1, 8732, 21]
         # print(priors.shape)  # [8732, 4]
@@ -90,7 +91,7 @@ class MultiBoxLoss(nn.Module):
         pos_idx = pos.unsqueeze(pos.dim()).expand_as(loc_data) # [batchsize, num_prior, 4]
         loc_p = loc_data[pos_idx].view(-1, 4)  # [num_pos, 4]
         loc_t = loc_t[pos_idx].view(-1, 4)   # [num_pos, 4]
-        loss_l = F.smooth_l1_loss(loc_p, loc_t, size_average=False)
+        loss_l = F.smooth_l1_loss(loc_p, loc_t, reduction='sum')
 
 
         # Compute max conf across batch for hard negative mining
@@ -116,11 +117,9 @@ class MultiBoxLoss(nn.Module):
         neg_idx = neg.unsqueeze(2).expand_as(conf_data)
         conf_p = conf_data[(pos_idx+neg_idx).gt(0)].view(-1, self.num_classes)
         targets_weighted = conf_t[(pos+neg).gt(0)]
-        loss_c = F.cross_entropy(conf_p, targets_weighted, size_average=False)
+        loss_c = F.cross_entropy(conf_p, targets_weighted, reduction='sum')
 
         # Sum of losses: L(x,c,l,g) = (Lconf(x, c) + αLloc(x,l,g)) / N
-        loss_l.clamp_max_(50)
-        loss_c.clamp_max_(50)
         N = num_pos.data.sum()
 
         loss_l /= N

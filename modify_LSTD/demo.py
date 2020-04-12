@@ -17,11 +17,11 @@ def cv2_demo(net, transform):
         x = torch.tensor(x.unsqueeze(0))
         scale = torch.Tensor([width, height, width, height]).cuda()
         with torch.no_grad():
-            confidence, rois = net(x)  # forward pass
-
+            confidence, rois, objectness = net(x)  # forward pass
         output = torch.zeros(size=(num_classes, top_k, 5))
         output = output.cuda() if cuda else output
         rois = rois.cuda() if cuda else rois
+
         for c in range(1, num_classes):
             id, count = nms(rois[0,0,:,1:].cpu(), confidence[0, :, c].cpu(), top_k=top_k)
             id = id.cuda() if cuda else id
@@ -29,7 +29,8 @@ def cv2_demo(net, transform):
 
         for i in range(output.size(0)):
             j = 0
-            while output[i, j, 0] >= 0.5:
+            while output[i, j, 0] >= 0.054:
+                # print(output[i, j], "hhhh")
                 pt = (output[i, j, 1:] * scale).cpu().numpy()
                 cv2.rectangle(frame,
                               (int(pt[0]), int(pt[1])),
@@ -46,7 +47,7 @@ def cv2_demo(net, transform):
     cv2.waitKey(0)
 
 
-weights = torch.load("./weights/trained/lstd_source114000.pth")
+weights = torch.load("./weights/trained/lstd_source4000.pth")
 net = build_ssd('test', 300, 2).cuda()
 net = nn.DataParallel(net, device_ids=[0])
 # net.load_state_dict(weights)
