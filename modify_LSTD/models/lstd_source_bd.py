@@ -131,8 +131,8 @@ class SSD(nn.Module):
             self.priors 
         )
         # with torch.no_grad():
-        rois, objectness = self.post_rois.forward(img, *rpn_output)  # rois.size (batch,1, top_k,5)  scaled[0, 1], objectness:(batch, 1, top_k, 1)
-
+        rois, objectness = self.post_rois.forward(img, *rpn_output)  # rois.size (batch,1, top_k,
+        # 5)  scaled[0, 1], objectness:(batch, 1, top_k, 1)
         #  faster rcnn roi pooling，
         roi_out = self.roi_pool(rois, sources[1])  # [batch, top_k, 128, 7, 7]
         # 分类输出（带背景）
@@ -142,8 +142,7 @@ class SSD(nn.Module):
             return confidence, rois, rpn_output, #mask_38, bd_feature
         else:
             confidence = self.softmax(confidence.view(conf.size(0),-1, config.num_classes))
-            objectness = F.softmax(rpn_output[1], dim=-1)
-            return confidence, rois, objectness #mask_38, None
+            return confidence, rois, objectness,   #mask_38, None
 
     def load_weights(self, base_file):
         other, ext = os.path.splitext(base_file)
@@ -254,7 +253,7 @@ mbox = {
 }
 
 
-def build_ssd(phase, size=300, base_classes=2):  # base ssd只检测objectness
+def build_ssd(phase, size=300):  # base ssd只检测objectness
     if phase != "test" and phase != "train":
         print("Error: Phase not recognized")
         return
@@ -263,10 +262,10 @@ def build_ssd(phase, size=300, base_classes=2):  # base ssd只检测objectness
         return
     base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
                                      add_extras(extras[str(size)], 1024),
-                                     mbox[str(size)], base_classes=base_classes)
+                                     mbox[str(size)], base_classes=2)
     extras_lstd_ = add_lstd_extras(1024)
     # return SSD(phase, base_, extras_, head_, num_classes)
-    return SSD(phase, base_, extras_, head_, extras_lstd_, base_classes)
+    return SSD(phase, base_, extras_, head_, extras_lstd_, 2)
 
 
 if __name__ == '__main__':

@@ -42,7 +42,7 @@ def train():
     batch_iterator = iter(dataloader)
 
     # 模型
-    lstd = build_ssd('train', config.voc['min_dim'], 2)
+    lstd = build_ssd('train', config.voc['min_dim'])
     net = lstd
 
     print("loading base network...")

@@ -5,6 +5,7 @@ from models.lstd_source_bd import build_ssd
 from data import BaseTransform
 from config import VOC_CLASSES as label, input_size, num_classes, top_k, cuda
 from utils.box_utils import nms
+import torchvision
 
 COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
 FONT = cv2.FONT_HERSHEY_SIMPLEX
@@ -17,40 +18,68 @@ def cv2_demo(net, transform):
         x = torch.tensor(x.unsqueeze(0))
         scale = torch.Tensor([width, height, width, height]).cuda()
         with torch.no_grad():
-            confidence, rois, objectness = net(x)  # forward pass
-        output = torch.zeros(size=(num_classes, top_k, 5))
-        output = output.cuda() if cuda else output
+            confidences, rois, objectness = net(x)  # forward pass
         rois = rois.cuda() if cuda else rois
 
-        for c in range(1, num_classes):
-            id, count = nms(rois[0,0,:,1:].cpu(), confidence[0, :, c].cpu(), top_k=top_k)
-            id = id.cuda() if cuda else id
-            output[c, :count] = torch.cat((confidence[0, id[:count], c].unsqueeze(1), rois[0, 0, id[:count], 1:]), 1)
+        flag = True
 
-        for i in range(output.size(0)):
-            j = 0
-            while output[i, j, 0] >= 0.054:
-                # print(output[i, j], "hhhh")
-                pt = (output[i, j, 1:] * scale).cpu().numpy()
-                cv2.rectangle(frame,
-                              (int(pt[0]), int(pt[1])),
-                              (int(pt[2]), int(pt[3])),
-                              COLORS[i % 3], 2)
-                cv2.putText(frame, label[i - 1], (int(pt[0]), int(pt[1])),
-                            FONT, 1, (255, 255, 255), 2, cv2.LINE_AA)
-                j += 1
-        return frame
+        batch = confidences.size(0)
+        output = torch.zeros(size=(batch, num_classes, top_k, 5)).to(confidences.device)
+        for i in range(batch):
+            roi = rois[i]
+            confidence = confidences[i]
+            for c in range(1, num_classes):
+                score = confidence[:, c]
+                if flag:
+                    keep, count = nms(roi[0, :, 1:], score, top_k=top_k)
+                    keep = keep[:count]
+                else:
+                    keep = torchvision.ops.nms(roi[0, :, 1:], score, 0.50)[:top_k]
+                    count = keep.size(0)
+                # print(keep.shape, count)
+                # print(score[keep], roi[0,keep,1:])
+                output[i, c, :count] = torch.cat((score[keep].unsqueeze(1), roi[0, keep, 1:]), 1)
 
-    img = cv2.imread("E:\\000000000785.jpg")
+        if flag:
+            for i in range(output.size(1)):
+                j = 0
+                while output[0, i, j, 0] > 1/(num_classes-1):
+                    print(output[0, i, j], i, j)
+                    pt = (output[0, i, j, 1:] * scale).cpu().numpy()
+                    cv2.rectangle(frame,
+                                  (int(pt[0]), int(pt[1])),
+                                  (int(pt[2]), int(pt[3])),
+                                  COLORS[i % 3], 2)
+                    cv2.putText(frame, label[i - 1], (int(pt[0]), int(pt[1])+50),
+                                FONT, 0.5, (255, 255, 255), 2, cv2.LINE_AA)
+                    j += 1
+            return frame
+        else:
+            for i in range(output.size(0)):
+                for r in range(output.size(2)):
+                    max_score, idx = output[i, :, r, 0].max(-1)
+                    if max_score.data > 1./ (num_classes-1):
+                        pt = (output[i, idx, r, 1:] * scale).cpu().numpy()
+                        cv2.rectangle(frame,
+                                      (int(pt[0]), int(pt[1])),
+                                      (int(pt[2]), int(pt[3])),
+                                      COLORS[i % 3], 2)
+                        cv2.putText(frame, label[idx - 1], (int(pt[0]), int(pt[1]+50)),
+                                    FONT, 0.5, (255, 255, 255), 2, cv2.LINE_AA)
+            return frame
+
+    img = cv2.imread("E:\python_project\ssd\ssdpytorch\dataset\VOC\VOCdevkit\VOC2007\JPEGImages"
+                     "\\000018.jpg")
+    # img = cv2.imread("E:\\lena.jpg")
     frame = predict(img)
     cv2.imshow("", frame)
     cv2.waitKey(0)
 
 
-weights = torch.load("./weights/trained/lstd_source4000.pth")
-net = build_ssd('test', 300, 2).cuda()
+weights = torch.load("./weights/trained/lstd_source8000.pth")
+net = build_ssd('test', 300).cuda()
 net = nn.DataParallel(net, device_ids=[0])
-# net.load_state_dict(weights)
+net.load_state_dict(weights)
 transform = BaseTransform(input_size, (104/256.0, 117/256.0, 123/256.0))
 
 cv2_demo(net.eval(), transform)

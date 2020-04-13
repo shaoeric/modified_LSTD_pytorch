@@ -54,9 +54,13 @@ class FocalLoss(nn.Module):
 
 
 class ClassifierLoss(nn.Module):
-    def __init__(self, num_class=21):
+    def __init__(self, num_class=21, focal_loss=False):
         super(ClassifierLoss, self).__init__()
-        self.loss_func = FocalLoss(num_classes=num_class, size_average=False)
+        self.focal_loss = focal_loss
+        if focal_loss:
+            self.loss_func = FocalLoss(num_classes=num_class, size_average=False)
+        else:
+            self.loss_func = F.cross_entropy
 
     def forward(self, rois, targets, prediction):
         """
@@ -70,8 +74,17 @@ class ClassifierLoss(nn.Module):
         num_rois = rois.size(2)
         assign_labels = torch.zeros(size=(batchsize, num_rois)).long()
         # 给每一个roi按照与true的iou最大分配标签，如果iou小于阈值则让其为0背景
-        for idx in range(batchsize):
-            assign_label_for_rois(rois[idx][0], targets[idx], assign_labels, idx, 0.3)
+        if self.focal_loss:
+            for idx in range(batchsize):
+                assign_label_for_rois(rois[idx][0], targets[idx], assign_labels, idx, 0.3)
+            loss = self.loss_func(prediction, assign_labels)
 
-        loss = self.loss_func(prediction, assign_labels)
+        else:
+            for idx in range(batchsize):
+                assign_label_for_rois(rois[idx][0], targets[idx], assign_labels, idx, 0.5)
+
+            loss = 0
+            for idx in range(batchsize):
+                loss += self.loss_func(prediction[idx], assign_labels[idx])
+
         return loss / batchsize
