@@ -192,7 +192,8 @@ def log_sum_exp(x):
         x (Variable(tensor)): conf_preds from conf layers
     """
     x_max = x.data.max()
-    return torch.log(torch.sum(torch.exp(x-x_max), 1, keepdim=True)) + x_max
+    diff = torch.exp(x - x_max).clamp_min(0.1)
+    return torch.log(torch.sum(diff, 1, keepdim=True)) + x_max
 
 
 # Original author: Francisco Massa:

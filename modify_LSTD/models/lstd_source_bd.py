@@ -135,8 +135,10 @@ class SSD(nn.Module):
         # 5)  scaled[0, 1], objectness:(batch, 1, top_k, 1)
         #  faster rcnn roi pooling，
         rois, roi_out, keep_count = self.roi_pool(rois, sources[1])  # roi_out:[batch, top_k, 128, 7, 7], keep_count [batch]：将一些问题框（x_max<=x_min）去掉保留下来的roi个数
+        # roi_out = self.roi_pool(rois, sources[1])  # roi_out:[batch, top_k, 128, 7, 7], keep_count [batch]：将一些问题框（x_max<=x_min）去掉保留下来的roi个数
         # 分类输出（带背景）
         confidence = self.classifier(roi_out, keep_count)  # [batchsize, top_k, num_classes+1]
+        # confidence = self.classifier(roi_out)  # [batchsize, top_k, num_classes+1]
         if self.phase == "train":
             return confidence, rois, rpn_output, #mask_38, bd_feature
         else:

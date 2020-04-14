@@ -12,11 +12,22 @@ class Classifier(nn.Module):
         self.num_classes = num_classes
         self.classifier = nn.Sequential(
             nn.Linear(config.conved_channel//8 * config.pooled_size **2, 64),
-            # nn.LeakyReLU(0.01, True),
             nn.ReLU(True),
             nn.Dropout(0.25),
             nn.Linear(64, self.num_classes)
         )
+
+    # def forward(self, x):
+        # x: [batch, num_roi, 16, 7, 7]
+        # batchsize = x.size(0)
+        # num_roi = x.size(1)
+        # x = x.view(batchsize, num_roi, -1)
+        # output = torch.zeros(size=(batchsize, num_roi, self.num_classes)).type(x.type())
+        # for idx in range(batchsize):
+        #     for j in range(num_roi):
+        #         out = self.classifier(x[idx][j])
+        #         output[idx, j, ...] = out
+        # return output
 
     def forward(self, x, keep_count):
         # x: [batch, num_roi, 16, 7, 7]
