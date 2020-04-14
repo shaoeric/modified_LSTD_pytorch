@@ -81,7 +81,7 @@ class ClassifierLoss(nn.Module):
 
         else:
             for idx in range(batchsize):
-                assign_label_for_rois(rois[idx][0], targets[idx], assign_labels, idx, 0.5)
+                assign_label_for_rois(rois[idx][0], targets[idx], assign_labels, idx, 0.3)
 
             loss = 0
             for idx in range(batchsize):

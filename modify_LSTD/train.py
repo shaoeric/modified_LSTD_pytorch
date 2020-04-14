@@ -57,7 +57,7 @@ def train():
     rpn_loss_func = MultiBoxLoss(2, 0.5, True, 0, True, 3, 0.5, False, config.cuda) # 判断是否为物体，所以
     # 只有2类
     mask_loss_func = nn.BCELoss()
-    conf_loss_func = ClassifierLoss(num_class=config.num_classes)
+    conf_loss_func = ClassifierLoss(num_class=config.num_classes, focal_loss=True)
     bd_regulation_func = MaskBlock(is_bd=True)
     net.train()
     step_index = 0  # 用于lr的调节
@@ -71,14 +71,13 @@ def train():
         except StopIteration as e:
             batch_iterator = iter(dataloader)
             images, targets, masks = next(batch_iterator)
-        print("targets",targets)
+        print("target", targets)
         masks = masks.float()
         if config.cuda:
             images, masks = images.cuda(), masks.cuda()
             targets = [ann.cuda() for ann in targets]
 
         confidence, roi, rpn_out = net(images)
-
 
         loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
         loss_c = conf_loss_func.forward(roi, targets, confidence)  # classification loss

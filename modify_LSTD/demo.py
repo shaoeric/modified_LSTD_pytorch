@@ -36,23 +36,22 @@ def cv2_demo(net, transform):
                 else:
                     keep = torchvision.ops.nms(roi[0, :, 1:], score, 0.50)[:top_k]
                     count = keep.size(0)
-                # print(keep.shape, count)
-                # print(score[keep], roi[0,keep,1:])
-                output[i, c, :count] = torch.cat((score[keep].unsqueeze(1), roi[0, keep, 1:]), 1)
 
+                output[i, c, :count] = torch.cat((score[keep].unsqueeze(1), roi[0, keep, 1:]), 1)
+                # print(torch.cat((score[keep].unsqueeze(1), roi[0, keep, 1:]), 1))
         if flag:
-            for i in range(output.size(1)):
-                j = 0
-                while output[0, i, j, 0] > 1/(num_classes-1):
-                    print(output[0, i, j], i, j)
-                    pt = (output[0, i, j, 1:] * scale).cpu().numpy()
+            for c in range(output.size(1)):
+                r = 0
+                while output[0, c, r, 0] > 1/(num_classes-1):
+                    # print(output[0, c, r], c, r)
+                    pt = (output[0, c, r, 1:] * scale).cpu().numpy()
                     cv2.rectangle(frame,
                                   (int(pt[0]), int(pt[1])),
                                   (int(pt[2]), int(pt[3])),
-                                  COLORS[i % 3], 2)
-                    cv2.putText(frame, label[i - 1], (int(pt[0]), int(pt[1])+50),
+                                  COLORS[c % 3], 2)
+                    cv2.putText(frame, label[c - 1], (int(pt[0]), int(pt[1])+50),
                                 FONT, 0.5, (255, 255, 255), 2, cv2.LINE_AA)
-                    j += 1
+                    r += 1
             return frame
         else:
             for i in range(output.size(0)):
@@ -76,7 +75,7 @@ def cv2_demo(net, transform):
     cv2.waitKey(0)
 
 
-weights = torch.load("./weights/trained/lstd_source8000.pth")
+weights = torch.load("./weights/trained/lstd_source1000.pth")
 net = build_ssd('test', 300).cuda()
 net = nn.DataParallel(net, device_ids=[0])
 net.load_state_dict(weights)

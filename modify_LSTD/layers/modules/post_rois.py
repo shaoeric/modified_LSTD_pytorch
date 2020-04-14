@@ -54,5 +54,4 @@ class Post_rois(nn.Module):
             objectness[i, 0, :min(self.top_k, keep.size(0))] = scores[keep[:self.top_k]].unsqueeze(1)
             scores[:] = i
             output[i, 0, :min(self.top_k, keep.size(0))] = torch.cat((scores[keep[:self.top_k]].unsqueeze(1), boxes[keep[:self.top_k]]), 1)
-
         return output, objectness  # [batchsize, 1, N, 5]   5: [图像id， xmin, ymin, xmax, ymax]
