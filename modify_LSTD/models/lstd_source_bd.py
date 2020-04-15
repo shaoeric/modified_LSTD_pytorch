@@ -54,7 +54,7 @@ class SSD(nn.Module):
         self.conf = nn.ModuleList(head[1])
 
         # faster rcnn part
-        self.post_rois = Post_rois(self.num_classes, 0, 1000, config.conf_thresh) # 背景+前景只有2类
+        self.post_rois = Post_rois(self.num_classes, 0, config.top_k, config.conf_thresh) # 背景+前景只有2类
         self.roi_pool = RoIPooling(pooled_size=config.pooled_size, img_size=self.size, conved_size=config.pooled_size, conved_channels=config.conved_channel)
         self.classifier = Classifier(num_classes=config.num_classes)
         if use_cuda:

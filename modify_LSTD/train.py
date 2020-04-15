@@ -53,14 +53,15 @@ def train():
         cudnn.benchmark = True
         net = net.cuda()
 
-    torch.nn.utils.clip_grad_norm(parameters=net.parameters(), max_norm=10, norm_type=2)
-    optimizer = optim.SGD(net.parameters(), lr=config.lr, momentum=config.momentum, weight_decay=config.weight_decay)
+    # torch.nn.utils.clip_grad_norm(parameters=net.module.classifier.parameters(), max_norm=10, norm_type=2)
+    optimizer = optim.Adam(net.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     rpn_loss_func = MultiBoxLoss(2, 0.3, True, 0, True, 3, 0.5, False, config.cuda) # 判断是否为物体，所以
     # 只有2类
     mask_loss_func = nn.BCELoss()
     conf_loss_func = ClassifierLoss(num_class=config.num_classes, focal_loss=True)
     bd_regulation_func = MaskBlock(is_bd=True)
     net.train()
+
     step_index = 0  # 用于lr的调节
     for iteration in range(config.voc['max_iter']):
         if iteration in config.voc['lr_steps']:
@@ -97,7 +98,7 @@ def train():
         if iteration % 1 == 0:
             print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f} || loss_c:{:.4f} '.format(repr(iteration), loss, loss_loc, loss_obj, loss_c))
 
-        if iteration != 0 and iteration % 3000 == 0:
+        if iteration != 0 and iteration % 1000 == 0:
             print('Saving state, iter:', iteration)
             torch.save(net.state_dict(), 'weights/lstd_source' +
                        repr(iteration) + '.pth')

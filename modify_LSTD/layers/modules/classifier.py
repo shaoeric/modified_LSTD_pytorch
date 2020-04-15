@@ -37,7 +37,7 @@ class Classifier(nn.Module):
         x = x.view(batchsize, num_roi, -1)
         output = torch.zeros(size=(batchsize, num_roi, self.num_classes)).type(x.type())
         for idx in range(batchsize):
-            for j in range(keep_count[idx]):
+            for j in range(min(keep_count[idx], config.selected_proposal)):
                 out = self.classifier(x[idx][j])
                 output[idx, j, ...] = out
         return output

@@ -1,10 +1,11 @@
 import torch
 from torch.autograd import Function
 from utils.box_utils import decode, nms
-from config import voc as cfg
+from config import voc as cfg, rpn_nms_thresh
 import cv2
 import torch.nn as nn
 import torchvision
+
 
 class Post_rois(nn.Module):
     """At test time, Detect is the final layer of SSD.  Decode location preds,
@@ -50,7 +51,7 @@ class Post_rois(nn.Module):
                 continue
             l_mask = c_mask.unsqueeze(1).expand_as(decoded_boxes)
             boxes = decoded_boxes[l_mask].view(-1, 4).clamp_(0, 1)
-            keep = torchvision.ops.nms(boxes, scores, 0.7)
+            keep = torchvision.ops.nms(boxes, scores, rpn_nms_thresh)
             objectness[i, 0, :min(self.top_k, keep.size(0))] = scores[keep[:self.top_k]].unsqueeze(1)
             scores[:] = i
             output[i, 0, :min(self.top_k, keep.size(0))] = torch.cat((scores[keep[:self.top_k]].unsqueeze(1), boxes[keep[:self.top_k]]), 1)
