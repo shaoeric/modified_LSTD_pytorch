@@ -26,13 +26,13 @@ class SSD(nn.Module):
         head: "multibox head" consists of loc and conf conv layers
     """
 
-    def __init__(self, phase, base, extras, head, extras_lstd, num_classes):
+    def __init__(self, phase, base, extras, head, extras_lstd, num_classes, train_classifier=True):
         super(SSD, self).__init__()
         self.phase = phase
         self.num_classes = num_classes  # objectness 所以是2
         self.cfg = config.voc
         self.priorbox = PriorBox(self.cfg)
-
+        self.train_classifier = train_classifier
         with torch.no_grad():
             self.priors = self.priorbox.forward()
 
@@ -130,11 +130,16 @@ class SSD(nn.Module):
             conf.view(conf.size(0), -1, self.num_classes),  # [batch, 8732, 2]
             self.priors 
         )
+        if not self.train_classifier:
+            return rpn_output
+
         # with torch.no_grad():
         rois, objectness = self.post_rois.forward(img, *rpn_output)  # rois.size (batch,1, top_k,
+        print(rois.requires_grad)
         # 5)  scaled[0, 1], objectness:(batch, 1, top_k, 1)
         #  faster rcnn roi pooling，
         rois, roi_out, keep_count = self.roi_pool(rois, sources[1])  # roi_out:[batch, top_k, 128, 7, 7], keep_count [batch]：将一些问题框（x_max<=x_min）去掉保留下来的roi个数
+        print(keep_count)
         # roi_out = self.roi_pool(rois, sources[1])  # roi_out:[batch, top_k, 128, 7, 7], keep_count [batch]：将一些问题框（x_max<=x_min）去掉保留下来的roi个数
         # 分类输出（带背景）
         confidence = self.classifier(roi_out, keep_count)  # [batchsize, top_k, num_classes+1]
@@ -254,7 +259,7 @@ mbox = {
 }
 
 
-def build_ssd(phase, size=300):  # base ssd只检测objectness
+def build_ssd(phase, size=300, train_classifier=True):  # base ssd只检测objectness
     if phase != "test" and phase != "train":
         print("Error: Phase not recognized")
         return
@@ -266,7 +271,7 @@ def build_ssd(phase, size=300):  # base ssd只检测objectness
                                      mbox[str(size)], base_classes=2)
     extras_lstd_ = add_lstd_extras(1024)
     # return SSD(phase, base_, extras_, head_, num_classes)
-    return SSD(phase, base_, extras_, head_, extras_lstd_, 2)
+    return SSD(phase, base_, extras_, head_, extras_lstd_, 2, train_classifier)
 
 
 if __name__ == '__main__':

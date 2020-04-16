@@ -14,7 +14,8 @@ class Classifier(nn.Module):
             nn.Linear(config.conved_channel//8 * config.pooled_size **2, 64),
             nn.ReLU(True),
             nn.Dropout(0.25),
-            nn.Linear(64, self.num_classes)
+            nn.Linear(64, self.num_classes),
+            nn.ReLU(True)
         )
 
     # def forward(self, x):

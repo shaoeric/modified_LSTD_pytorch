@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from utils.box_utils import assign_label_for_rois
 import config
-
+from utils.box_utils import log_sum_exp
 
 class FocalLoss(nn.Module):
     def __init__(self, alpha=0.25, gamma=2, num_classes=21, size_average=True):
@@ -46,19 +46,17 @@ class FocalLoss(nn.Module):
         self.alpha = self.alpha.gather(0,labels.view(-1))
         loss = -torch.mul(torch.pow((1-preds_softmax), self.gamma), preds_logsoft)  # torch.pow((1-preds_softmax), self.gamma) 为focal loss中 (1-pt)**γ
         loss = torch.mul(self.alpha, loss.t())
-        if self.size_average:
-            loss = loss.mean()
-        else:
-            loss = loss.sum()
         return loss
 
 
 class ClassifierLoss(nn.Module):
-    def __init__(self, num_class=21, focal_loss=False):
+    def __init__(self, num_classes=21, focal_loss=False, negpos_ratio=3):
         super(ClassifierLoss, self).__init__()
+        self.num_classes = num_classes
         self.focal_loss = focal_loss
+        self.negpos_ratio = negpos_ratio
         if focal_loss:
-            self.loss_func = FocalLoss(num_classes=num_class, size_average=False)
+            self.loss_func = FocalLoss(num_classes=num_classes, size_average=False)
         else:
             self.loss_func = F.cross_entropy
 
@@ -74,17 +72,35 @@ class ClassifierLoss(nn.Module):
         num_rois = rois.size(2)
         assign_labels = torch.zeros(size=(batchsize, num_rois)).long()
         # 给每一个roi按照与true的iou最大分配标签，如果iou小于阈值则让其为0背景
-        if self.focal_loss:
-            for idx in range(batchsize):
-                assign_label_for_rois(rois[idx][0], targets[idx], assign_labels, idx, 0.3)
-            loss = self.loss_func(prediction, assign_labels)
+        for idx in range(batchsize):
+            assign_label_for_rois(rois[idx][0], targets[idx], assign_labels, idx, 0.3)
 
-        else:
-            for idx in range(batchsize):
-                assign_label_for_rois(rois[idx][0], targets[idx], assign_labels, idx, 0.3)
+        # # # 先找到有效predict的index
+        # prediction = prediction.view(-1, self.num_classes)
+        # assign_labels = assign_labels.view(-1, 1)
+        # effect_idx = prediction.sum(dim=-1, keepdim=True).gt(0)
+        # prediction = prediction[effect_idx.expand_as(prediction)].view(-1, self.num_classes)
+        # assign_labels = assign_labels[effect_idx].view(-1, 1)  # [batch*num_roi, 1]
 
-            loss = 0
-            for idx in range(batchsize):
-                loss += self.loss_func(prediction[idx], assign_labels[idx])
+        # HNM
+        pos = assign_labels > 0
+        batch_conf = prediction.view(-1, self.num_classes)
+        loss_c = log_sum_exp(batch_conf) - batch_conf.gather(1, assign_labels.view(-1, 1))
+        loss_c = loss_c.view(batchsize, -1)  # # [batch, num_rois]
+        pos = pos.view(batchsize, -1)
+        loss_c[pos] = 0
+        _, loss_idx = loss_c.sort(1, descending=True) # [batch, num_rois]
+        _, idx_rank = loss_idx.sort(1)
+        num_pos = pos.long().sum(1, keepdim=True)
+        num_neg = torch.clamp(self.negpos_ratio * num_pos, max=pos.size(1) - 1)
+        neg = idx_rank < num_neg.expand_as(idx_rank)
 
-        return loss / batchsize
+        print(num_pos)
+        # if self.focal_loss:
+        #     loss = self.loss_func(prediction, assign_labels)
+        # else:
+        #     # TODO
+        #     loss = F.cross_entropy(prediction, assign_labels)
+        #     pass
+        # print(loss)
+        return 0 #loss / batchsize

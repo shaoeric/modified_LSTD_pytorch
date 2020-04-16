@@ -62,7 +62,7 @@ class MultiBoxLoss(nn.Module):
         num_priors = (priors.size(0))  # 8732
         num_classes = self.num_classes
 
-        conf_data = F.softmax(conf_data, dim=-1)
+        # conf_data = F.softmax(conf_data, dim=-1)
         # print(loc_data.shape) # [1, 8732, 4]
         # print(conf_data.shape)  # [1, 8732, 21]
         # print(priors.shape)  # [8732, 4]
