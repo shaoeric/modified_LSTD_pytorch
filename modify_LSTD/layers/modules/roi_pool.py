@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-
+torch.set_printoptions(threshold=float('inf'))
 class RoIPooling(nn.Module):
     def __init__(self, pooled_size=7, img_size=300, conved_channels=256, conved_size=7):
         super(RoIPooling, self).__init__()
@@ -33,20 +33,23 @@ class RoIPooling(nn.Module):
         rois = roi_proposal.clone()
         batch = rois.size(0)
         num_rois = rois.size(2)  # top_k
-        effective_rois = torch.zeros(size=rois.shape)
+
+        rois[:, :, :, 1:] = rois[:, :, :, 1:] * self.img_size / 16
+        rois = rois.long()[:, :, :, 1:]
+
         effective_rois_features = torch.zeros(size=(features.size(0), num_rois, self.conved_channels//8, self.conved_size, self.conved_size)).type(features.type()) # 有效roi的roi_pooling特征图
         keep_count = torch.zeros(size=(batch,)).long()  # 用来记录每一张图片 有多少个roi是有效的
 
-        rois[:, :, :, 1:] = rois[:, :, :, 1:] *self.img_size / 16
-        rois = rois.long()
+        effective_rois = torch.zeros(size=rois.shape)
         for i in range(batch):
             n = 0
             for r in range(num_rois):
-                roi = rois[i, 0, r, 1:]
+                roi = rois[i, 0, r]
                 x_min, y_min, x_max, y_max = roi.clamp(min=0, max=self.img_size / 16)
                 if x_max <= x_min or y_max <= y_min:
                     continue
-                effective_rois[i, 0, n] = rois[i, 0, r]
+
+                effective_rois[i, 0, n] = roi.float() * 16 / self.img_size  # 注意要加float，要不然全都是零
                 out = features.narrow(0, i, 1)[..., y_min: y_max+1, x_min: x_max+1]
                 out = self.pool(out)
                 out = self.conv(out)

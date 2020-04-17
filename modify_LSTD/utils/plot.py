@@ -26,3 +26,10 @@ def show_tensor(tensor:torch.Tensor, batch_index):
         plt.imshow(img)
         plt.show()
 
+
+def show_tensor_average(tensor:torch.Tensor, bath_index):
+    img = tensor[bath_index]
+    img = torch.mean(img, dim=0)
+    img = img.cpu().numpy()
+    plt.imshow(img)
+    plt.show()

@@ -6,7 +6,7 @@ from layers.modules import L2Norm, MultiBoxLoss, RoIPooling, Classifier, MaskGen
 import config
 import os
 from layers.modules import Post_rois
-from copy import deepcopy
+
 
 use_cuda = torch.cuda.is_available()
 
@@ -26,7 +26,7 @@ class SSD(nn.Module):
         head: "multibox head" consists of loc and conf conv layers
     """
 
-    def __init__(self, phase, base, extras, head, extras_lstd, num_classes, train_classifier=True):
+    def __init__(self, phase, base, extras, head, num_classes, train_classifier=False):
         super(SSD, self).__init__()
         self.phase = phase
         self.num_classes = num_classes  # objectness 所以是2
@@ -54,7 +54,8 @@ class SSD(nn.Module):
         self.conf = nn.ModuleList(head[1])
 
         # faster rcnn part
-        self.post_rois = Post_rois(self.num_classes, 0, config.top_k, config.conf_thresh) # 背景+前景只有2类
+        self.post_roi = Post_rois(2, 0, config.top_k, config.conf_thresh, config.rpn_nms_thresh)
+        self.detect = Detect(2, 0, config.top_k, config.conf_thresh, config.rpn_nms_thresh)
         self.roi_pool = RoIPooling(pooled_size=config.pooled_size, img_size=self.size, conved_size=config.pooled_size, conved_channels=config.conved_channel)
         self.classifier = Classifier(num_classes=config.num_classes)
         if use_cuda:
@@ -63,6 +64,7 @@ class SSD(nn.Module):
             self.classifier = self.classifier.cuda()
 
         self.softmax = nn.Softmax(dim=-1)
+
 
     def forward(self, x):
         """Applies network layers and ops on input image(s) x.
@@ -81,6 +83,7 @@ class SSD(nn.Module):
                     3: priorbox layers, Shape: [2,num_priors*4]
         """
         img = x.clone()
+        # self.train_classifier = train_classifier if train_classifier else self.train_classifier
 
         sources = list()
         loc = list()
@@ -130,25 +133,28 @@ class SSD(nn.Module):
             conf.view(conf.size(0), -1, self.num_classes),  # [batch, 8732, 2]
             self.priors 
         )
+
+        # 训练阶段 只训练rpn
         if not self.train_classifier:
             return rpn_output
 
         # with torch.no_grad():
-        rois, objectness = self.post_rois.forward(img, *rpn_output)  # rois.size (batch,1, top_k,
-        print(rois.requires_grad)
-        # 5)  scaled[0, 1], objectness:(batch, 1, top_k, 1)
+        #     rois = self.detect.forward(*rpn_output)[:, 1:, :, :]  # rois.size (batch,1, top_k,
+        # 5)  scaled[0, 1]
+        rois = self.post_roi.forward(*rpn_output)[:, 1:, :, :]
         #  faster rcnn roi pooling，
         rois, roi_out, keep_count = self.roi_pool(rois, sources[1])  # roi_out:[batch, top_k, 128, 7, 7], keep_count [batch]：将一些问题框（x_max<=x_min）去掉保留下来的roi个数
-        print(keep_count)
+
         # roi_out = self.roi_pool(rois, sources[1])  # roi_out:[batch, top_k, 128, 7, 7], keep_count [batch]：将一些问题框（x_max<=x_min）去掉保留下来的roi个数
         # 分类输出（带背景）
         confidence = self.classifier(roi_out, keep_count)  # [batchsize, top_k, num_classes+1]
-        # confidence = self.classifier(roi_out)  # [batchsize, top_k, num_classes+1]
+        rois = rois[:, :, :confidence.size(1), :]
+
         if self.phase == "train":
-            return confidence, rois, rpn_output, #mask_38, bd_feature
+            return confidence, rois, rpn_output, keep_count #mask_38, bd_feature
         else:
             confidence = self.softmax(confidence.view(conf.size(0),-1, config.num_classes))
-            return confidence, rois, objectness,   #mask_38, None
+            return confidence, rois,   #mask_38, None
 
     def load_weights(self, base_file):
         other, ext = os.path.splitext(base_file)
@@ -208,25 +214,6 @@ def add_extras(cfg, i, batch_norm=False):
     return layers
 
 
-def add_lstd_extras(i):
-    # Extra layers added to VGG for feature scaling
-    layers = []
-    in_channels = i
-    conv_add1 = nn.Conv2d(in_channels, 256,
-                          kernel_size=3, stride=1, padding=1)
-
-    in_channels = 256
-    batchnorm_add1 = nn.BatchNorm2d(in_channels)
-    conv_add2 = nn.Conv2d(in_channels, 256,
-                          kernel_size=3, stride=2, padding=1)
-
-    batchnorm_add2 = nn.BatchNorm2d(in_channels)
-    # bbox_score_voc = nn.Linear(256, 21)
-
-    layers += [conv_add1, batchnorm_add1, nn.ReLU(inplace=True), conv_add2, batchnorm_add2, nn.ReLU(inplace=True)]
-    return layers
-
-
 def multibox(vgg, extra_layers, cfg, base_classes):
     loc_layers = []
     conf_layers = []
@@ -269,13 +256,12 @@ def build_ssd(phase, size=300, train_classifier=True):  # base ssd只检测objec
     base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
                                      add_extras(extras[str(size)], 1024),
                                      mbox[str(size)], base_classes=2)
-    extras_lstd_ = add_lstd_extras(1024)
     # return SSD(phase, base_, extras_, head_, num_classes)
-    return SSD(phase, base_, extras_, head_, extras_lstd_, 2, train_classifier)
+    return SSD(phase, base_, extras_, head_, 2, train_classifier)
 
 
 if __name__ == '__main__':
-    net = build_ssd("train", base_classes=2).cuda()
+    net = build_ssd("train").cuda()
     # net.eval()
     img = torch.rand(size=(1, 3, 300, 300)).cuda()
     out = net(img)

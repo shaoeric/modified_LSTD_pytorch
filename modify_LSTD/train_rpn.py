@@ -42,17 +42,19 @@ def train():
     batch_iterator = iter(dataloader)
 
     # 模型
-    lstd = build_ssd('train', config.voc['min_dim'])
+    lstd = build_ssd('train', config.voc['min_dim'], False)
     net = lstd
 
     print("loading base network...")
+    net.vgg.load_state_dict(torch.load(os.path.join(config.pretrained_folder, config.basenet)))
+    net.extras.apply(weights_init)
+    net.loc.apply(weights_init)
+    net.conf.apply(weights_init)
 
     if config.cuda:
         net = torch.nn.DataParallel(net, [0])
         cudnn.benchmark = True
         net = net.cuda()
-
-    net.load_state_dict(torch.load(os.path.join(config.pretrained_folder, "lstd_source_rpn1000.pth")))
 
     # torch.nn.utils.clip_grad_norm(parameters=net.module.classifier.parameters(), max_norm=10, norm_type=2)
     optimizer = optim.Adam(net.parameters(), lr=config.lr, weight_decay=config.weight_decay)
@@ -80,28 +82,28 @@ def train():
             images, masks = images.cuda(), masks.cuda()
             targets = [ann.cuda() for ann in targets]
 
-        confidence, roi, rpn_out = net(images)
+        rpn_out = net(images)
 
         loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
-        loss_c = conf_loss_func.forward(roi, targets, confidence)  # classification loss
+        # loss_c = conf_loss_func.forward(roi, targets, confidence)  # classification loss
         # loss_mask = mask_loss_func(mask_out.view(mask_out.size(0), -1), masks.view(masks.size(0), -1))
 
         # bd_regulation = bd_regulation_func.forward(bd_feature, masks)
         # # l1正则数值过大，达到4000多，l2正则比较平滑，调试过程中遇到的最大为80
         # bd_regulation = torch.sqrt(torch.sum(bd_regulation**2)) / torch.mul(*bd_regulation.shape[:2])
-        loss = loss_loc + loss_obj + loss_c # #+ bd_regulation
+        loss = loss_loc + loss_obj #+ loss_c # #+ bd_regulation
         # loss = loss_obj + loss_c # #+ bd_regulation
         loss.backward()
 
         optimizer.step()
         optimizer.zero_grad()
 
-        if iteration % 1 == 0:
-            print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f} || loss_c:{:.4f} '.format(repr(iteration), loss, loss_loc, loss_obj, loss_c))
+        if iteration % 10 == 0:
+            print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f}'.format(repr(iteration), loss, loss_loc, loss_obj))
 
         if iteration != 0 and iteration % 1000 == 0:
             print('Saving state, iter:', iteration)
-            torch.save(net.state_dict(), 'weights/lstd_source' +
+            torch.save(net.state_dict(), 'weights/lstd_source_rpn' +
                        repr(iteration) + '.pth')
 
 
@@ -110,6 +112,15 @@ def adjust_learning_rate(optimizer, gamma, step):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
+
+def xavier(param):
+    init.xavier_uniform(param)
+
+
+def weights_init(m):
+    if isinstance(m, nn.Conv2d):
+        xavier(m.weight.data)
+        m.bias.data.zero_()
 
 if __name__ == '__main__':
     train()

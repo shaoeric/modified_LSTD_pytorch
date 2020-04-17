@@ -14,9 +14,9 @@ MEANS = (104, 117, 123)
 VOC_ROOT = "E:/python_project/ssd/ssdpytorch/dataset/VOC/VOCdevkit"
 basenet = 'vgg16_reducedfc.pth'
 
-batch_size = 1
+batch_size = 2
 num_workers = 4
-lr = 2e-4
+lr = 5e-4
 momentum = 0.9
 weight_decay = 1e-4
 gamma = 0.1
@@ -26,10 +26,10 @@ cuda = True if torch.cuda.is_available() else False
 
 num_classes = 21
 mask_thresh = 0.3
-top_k = 1000
-selected_proposal = 500
+top_k = 200
+selected_proposal = 100
 conf_thresh = 0.01
-rpn_nms_thresh = 0.7
+rpn_nms_thresh = 0.9
 nms_thresh = 0.45
 pooled_size = 7
 conved_channel = 128
@@ -38,8 +38,8 @@ input_size = 300
 # SSD300 CONFIGS
 voc = {
     'num_classes': 21,
-    'lr_steps': (3000, 6000, 8000),
-    'max_iter': 12000,
+    'lr_steps': (60000, 100000, 120000),
+    'max_iter': 150000,
     'feature_maps': [38, 19, 10, 5, 3, 1],
     'min_dim': 300,
     'steps': [8, 16, 32, 64, 100, 300],

@@ -2,7 +2,7 @@ import torch
 from torch.autograd import Function
 from config import voc as cfg
 from utils.box_utils import decode, nms
-
+import torch.nn.functional as F
 
 class Detect(Function):
     """At test time, Detect is the final layer of SSD.  Decode location preds,
@@ -34,6 +34,7 @@ class Detect(Function):
         num = loc_data.size(0)  # batch size
         num_priors = prior_data.size(0)  # 8732
         output = torch.zeros(num, self.num_classes, self.top_k, 5)
+        conf_data = F.softmax(conf_data, dim=-1)
         conf_preds = conf_data.view(num, num_priors, self.num_classes).transpose(2, 1) # [batch, 21, 8732]
 
         # Decode predictions into bboxes.
@@ -52,11 +53,8 @@ class Detect(Function):
                 boxes = decoded_boxes[l_mask].view(-1, 4)
                 # idx of highest scoring and non-overlapping boxes per class, \
                 # ids是针对scores的[n]而言的，而不是对[8732]的
-                ids, count = nms(boxes, scores, self.nms_thresh, self.top_k)
-                output[i, cl, :count] = torch.cat((scores[ids[:count]].unsqueeze(1), boxes[ids[:count]]), 1)
-        flt = output.contiguous().view(num, -1, 5)
-        _, idx = flt[:, :, 0].sort(1, descending=True)
-        _, rank = idx.sort(1)
-        flt[(rank < self.top_k).unsqueeze(-1).expand_as(flt)].fill_(0)
 
+                ids, count = nms(boxes, scores, self.nms_thresh, self.top_k)
+
+                output[i, cl, :count] = torch.cat((scores[ids[:count]].unsqueeze(1), boxes[ids[:count]]), 1)
         return output

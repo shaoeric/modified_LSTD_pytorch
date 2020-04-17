@@ -47,6 +47,11 @@ def train():
 
     print("loading base network...")
 
+    # optimizer = optim.Adam([
+    #     {'params': net.roi_pool.parameters(), 'lr':config.lr, 'weight_decay':config.weight_decay},
+    #     {'params': net.classifier.parameters(), 'lr':config.lr, 'weight_decay':config.weight_decay}
+    # ])
+
     if config.cuda:
         net = torch.nn.DataParallel(net, [0])
         cudnn.benchmark = True
@@ -55,6 +60,7 @@ def train():
     net.load_state_dict(torch.load(os.path.join(config.pretrained_folder, "lstd_source_rpn1000.pth")))
 
     # torch.nn.utils.clip_grad_norm(parameters=net.module.classifier.parameters(), max_norm=10, norm_type=2)
+
     optimizer = optim.Adam(net.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     rpn_loss_func = MultiBoxLoss(2, 0.5, True, 0, True, 3, 0.5, False, config.cuda) # 判断是否为物体，所以
     # 只有2类
@@ -80,28 +86,31 @@ def train():
             images, masks = images.cuda(), masks.cuda()
             targets = [ann.cuda() for ann in targets]
 
-        confidence, roi, rpn_out = net(images)
+        optimizer.zero_grad()
 
-        loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
-        loss_c = conf_loss_func.forward(roi, targets, confidence)  # classification loss
+        confidence, roi, rpn_out, keep_count = net(images)
+        if keep_count.sum() == 0:  # 没有得到正样本
+            print("no positive samples")
+            continue
+        print(roi.shape)
+        # loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
+        loss = conf_loss_func.forward(roi, targets, confidence)  # classification loss
         # loss_mask = mask_loss_func(mask_out.view(mask_out.size(0), -1), masks.view(masks.size(0), -1))
 
         # bd_regulation = bd_regulation_func.forward(bd_feature, masks)
         # # l1正则数值过大，达到4000多，l2正则比较平滑，调试过程中遇到的最大为80
         # bd_regulation = torch.sqrt(torch.sum(bd_regulation**2)) / torch.mul(*bd_regulation.shape[:2])
-        loss = loss_loc + loss_obj + loss_c # #+ bd_regulation
+        # loss = loss_c # #+ bd_regulation
         # loss = loss_obj + loss_c # #+ bd_regulation
         loss.backward()
-
         optimizer.step()
-        optimizer.zero_grad()
 
         if iteration % 1 == 0:
-            print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f} || loss_c:{:.4f} '.format(repr(iteration), loss, loss_loc, loss_obj, loss_c))
+            print('iter: {} || loss:{:.4f}'.format(repr(iteration), loss))
 
         if iteration != 0 and iteration % 1000 == 0:
             print('Saving state, iter:', iteration)
-            torch.save(net.state_dict(), 'weights/lstd_source' +
+            torch.save(net.module.state_dict(), 'weights/lstd_source' +
                        repr(iteration) + '.pth')
 
 

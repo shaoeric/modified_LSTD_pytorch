@@ -130,7 +130,7 @@ def assign_label_for_rois(rois, targets, assigned_label, idx, threshold):
     """
     truth = targets[:, :-1]
     label = targets[:, -1]
-    roi_box = rois[:, 1:]
+    roi_box = rois[:, :]
     overlaps = jaccard(truth, roi_box)  # [truth_num, top_k]
     best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
     conf = label[best_truth_idx] + 1

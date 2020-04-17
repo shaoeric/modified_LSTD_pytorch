@@ -107,7 +107,6 @@ class MultiBoxLoss(nn.Module):
         num_neg = torch.clamp(self.negpos_ratio*num_pos, max=pos.size(1)-1)
         neg = idx_rank < num_neg.expand_as(idx_rank)
 
-
         # Confidence Loss Including Positive and Negative Examples
         pos_idx = pos.unsqueeze(2).expand_as(conf_data)
         neg_idx = neg.unsqueeze(2).expand_as(conf_data)
