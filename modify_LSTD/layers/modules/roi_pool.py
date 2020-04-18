@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import config
 
 torch.set_printoptions(threshold=float('inf'))
 class RoIPooling(nn.Module):
@@ -56,4 +57,4 @@ class RoIPooling(nn.Module):
                 effective_rois_features[i, n, ...] = out
                 n += 1
             keep_count[i] = n
-        return effective_rois, effective_rois_features, keep_count
+        return effective_rois.to(config.device), effective_rois_features.to(config.device), keep_count.to(config.device)

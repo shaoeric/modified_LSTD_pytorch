@@ -23,6 +23,7 @@ gamma = 0.1
 pretrained_folder = os.path.join(HOME, 'weights', 'pretrained')
 save_folder = os.path.join(HOME, 'weights', 'trained')
 cuda = True if torch.cuda.is_available() else False
+device = 'cuda:0'
 
 num_classes = 21
 mask_thresh = 0.3

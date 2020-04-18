@@ -26,13 +26,12 @@ class SSD(nn.Module):
         head: "multibox head" consists of loc and conf conv layers
     """
 
-    def __init__(self, phase, base, extras, head, num_classes, train_classifier=False):
+    def __init__(self, phase, base, extras, head, num_classes):
         super(SSD, self).__init__()
         self.phase = phase
         self.num_classes = num_classes  # objectness 所以是2
         self.cfg = config.voc
         self.priorbox = PriorBox(self.cfg)
-        self.train_classifier = train_classifier
         with torch.no_grad():
             self.priors = self.priorbox.forward()
 
@@ -55,18 +54,20 @@ class SSD(nn.Module):
 
         # faster rcnn part
         self.post_roi = Post_rois(2, 0, config.top_k, config.conf_thresh, config.rpn_nms_thresh)
-        self.detect = Detect(2, 0, config.top_k, config.conf_thresh, config.rpn_nms_thresh)
+        # self.detect = Detect(2, 0, config.top_k, config.conf_thresh, config.rpn_nms_thresh)
         self.roi_pool = RoIPooling(pooled_size=config.pooled_size, img_size=self.size, conved_size=config.pooled_size, conved_channels=config.conved_channel)
         self.classifier = Classifier(num_classes=config.num_classes)
         if use_cuda:
-            # self.mask_generator = self.mask_generator.cuda()
-            self.roi_pool = self.roi_pool.cuda()
-            self.classifier = self.classifier.cuda()
+            # self.mask_generator = self.mask_generator.cuda(device=config.device)
+            self.post_roi = self.post_roi.cuda(device=config.device)
+            self.roi_pool = self.roi_pool.cuda(device=config.device)
+            self.classifier = self.classifier.cuda(device=config.device)
+            self.priors = self.priors.cuda(device=config.device)
 
         self.softmax = nn.Softmax(dim=-1)
 
 
-    def forward(self, x):
+    def forward(self, x, train_classifier=False):
         """Applies network layers and ops on input image(s) x.
         Args:
             x: input image or batch of images. Shape: [batch,3,300,300].
@@ -135,19 +136,19 @@ class SSD(nn.Module):
         )
 
         # 训练阶段 只训练rpn
-        if not self.train_classifier:
+        if not train_classifier:
             return rpn_output
 
         # with torch.no_grad():
         #     rois = self.detect.forward(*rpn_output)[:, 1:, :, :]  # rois.size (batch,1, top_k,
         # 5)  scaled[0, 1]
-        rois = self.post_roi.forward(*rpn_output)[:, 1:, :, :]
+        rois = self.post_roi.forward(*rpn_output)[:, 1:, :, :].to(config.device)
         #  faster rcnn roi pooling，
         rois, roi_out, keep_count = self.roi_pool(rois, sources[1])  # roi_out:[batch, top_k, 128, 7, 7], keep_count [batch]：将一些问题框（x_max<=x_min）去掉保留下来的roi个数
 
         # roi_out = self.roi_pool(rois, sources[1])  # roi_out:[batch, top_k, 128, 7, 7], keep_count [batch]：将一些问题框（x_max<=x_min）去掉保留下来的roi个数
         # 分类输出（带背景）
-        confidence = self.classifier(roi_out, keep_count)  # [batchsize, top_k, num_classes+1]
+        confidence = self.classifier(roi_out, keep_count).to(config.device)  # [batchsize, top_k, num_classes+1]
         rois = rois[:, :, :confidence.size(1), :]
 
         if self.phase == "train":
@@ -246,7 +247,7 @@ mbox = {
 }
 
 
-def build_ssd(phase, size=300, train_classifier=True):  # base ssd只检测objectness
+def build_ssd(phase, size=300):  # base ssd只检测objectness
     if phase != "test" and phase != "train":
         print("Error: Phase not recognized")
         return
@@ -257,7 +258,7 @@ def build_ssd(phase, size=300, train_classifier=True):  # base ssd只检测objec
                                      add_extras(extras[str(size)], 1024),
                                      mbox[str(size)], base_classes=2)
     # return SSD(phase, base_, extras_, head_, num_classes)
-    return SSD(phase, base_, extras_, head_, 2, train_classifier)
+    return SSD(phase, base_, extras_, head_, 2)
 
 
 if __name__ == '__main__':

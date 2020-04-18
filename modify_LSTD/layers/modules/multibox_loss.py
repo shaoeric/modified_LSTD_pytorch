@@ -78,8 +78,8 @@ class MultiBoxLoss(nn.Module):
             match(self.threshold, truths, defaults, self.variance, labels,
                   loc_t, conf_t, idx)  # 给每一个prior匹配最佳gt坐标，对每一个prior打上类别标签，编码得到定位坐标的偏置
         if self.use_gpu:
-            loc_t = loc_t.cuda()
-            conf_t = conf_t.cuda()
+            loc_t = loc_t.cuda(device=config.device)
+            conf_t = conf_t.cuda(device=config.device)
         # wrap targets
         loc_t = Variable(loc_t, requires_grad=False)  # [batchsize, num_prior, 4]
         conf_t = Variable(conf_t, requires_grad=False)  # [batchsize, num_prior]

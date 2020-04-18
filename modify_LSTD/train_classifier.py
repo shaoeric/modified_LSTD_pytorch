@@ -61,7 +61,18 @@ def train():
 
     # torch.nn.utils.clip_grad_norm(parameters=net.module.classifier.parameters(), max_norm=10, norm_type=2)
 
-    optimizer = optim.Adam(net.parameters(), lr=config.lr, weight_decay=config.weight_decay)
+    # optimizer = optim.Adam([
+    #     {'params': net.module.roi_pool.parameters(), 'lr':config.lr, 'weight_decay':config.weight_decay},
+    #     {'params': net.module.classifier.parameters(), 'lr':config.lr, 'weight_decay':config.weight_decay}
+    # ])
+    # optimizer = optim.Adam(net.parameters(), lr=config.lr, weight_decay=config.weight_decay)
+    # for param_group in optimizer.param_groups:
+    #     print(param_group['lr'])
+
+    optimizer = optim.Adam([
+        {'params': net.module.roi_pool.parameters(), 'lr':config.lr, 'weight_decay':config.weight_decay},
+        {'params': net.module.classifier.parameters(), 'lr':config.lr, 'weight_decay':config.weight_decay}
+    ])
     rpn_loss_func = MultiBoxLoss(2, 0.5, True, 0, True, 3, 0.5, False, config.cuda) # 判断是否为物体，所以
     # 只有2类
     mask_loss_func = nn.BCELoss()
@@ -93,7 +104,7 @@ def train():
             print("no positive samples")
             continue
         # loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
-        result = conf_loss_func.forward(roi, targets, confidence)  # classification loss
+        result, num = conf_loss_func.forward(roi, targets, confidence)  # classification loss
         # 没有得到label的情况
         if not result:
             print("no positive assigned labels")
@@ -111,11 +122,11 @@ def train():
         optimizer.step()
 
         if iteration % 1 == 0:
-            print('iter: {} || loss:{:.4f}, keep:{}'.format(repr(iteration), loss, keep_count))
+            print('iter: {} || loss:{:.4f}, pos:{}'.format(repr(iteration), loss, num))
 
-        if iteration != 0 and iteration % 10 == 0:
+        if iteration != 0 and iteration % 1000 == 0:
             print('Saving state, iter:', iteration)
-            # torch.save(net.module.state_dict(), 'weights/lstd_source' + repr(iteration) + '.pth')
+            torch.save(net.module.state_dict(), 'weights/lstd_source' + repr(iteration) + '.pth')
 
 
 def adjust_learning_rate(optimizer, gamma, step):

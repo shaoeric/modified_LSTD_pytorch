@@ -12,10 +12,10 @@ class Classifier(nn.Module):
         self.num_classes = num_classes
         self.classifier = nn.Sequential(
             nn.Linear(config.conved_channel//8 * config.pooled_size **2, 64),
-            nn.ReLU(True),
+            nn.LeakyReLU(0.1, True),
             nn.Dropout(0.25),
             nn.Linear(64, self.num_classes),
-            nn.ReLU(True)
+            nn.LeakyReLU(0.1, True)
         )
 
     # def forward(self, x):

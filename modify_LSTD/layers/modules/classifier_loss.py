@@ -70,7 +70,7 @@ class ClassifierLoss(nn.Module):
         """
         batchsize = rois.size(0)
         num_rois = prediction.size(1)
-        assign_labels = torch.zeros(size=(batchsize, num_rois)).long()
+        assign_labels = torch.zeros(size=(batchsize, num_rois)).long().to(config.device)
 
         # 给每一个roi按照与true的iou最大分配标签，如果iou小于阈值则让其为0背景
         for idx in range(batchsize):
@@ -89,7 +89,7 @@ class ClassifierLoss(nn.Module):
         num_pos = pos.long().sum(1, keepdim=True)
         N = num_pos.data.sum()
         if N == 0:
-            return False
+            return False, None
         num_neg = torch.clamp(self.negpos_ratio * num_pos, max=pos.size(1) - 1)
         neg = idx_rank < num_neg.expand_as(idx_rank)
 
@@ -99,4 +99,4 @@ class ClassifierLoss(nn.Module):
         targets_weighted = assign_labels[(pos+neg).gt(0)]
         loss_c = F.cross_entropy(conf_p, targets_weighted, size_average=False)
         loss_c /= N
-        return loss_c
+        return loss_c, N
