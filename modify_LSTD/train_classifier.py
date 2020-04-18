@@ -92,9 +92,14 @@ def train():
         if keep_count.sum() == 0:  # 没有得到正样本
             print("no positive samples")
             continue
-        print(roi.shape)
         # loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
-        loss = conf_loss_func.forward(roi, targets, confidence)  # classification loss
+        result = conf_loss_func.forward(roi, targets, confidence)  # classification loss
+        # 没有得到label的情况
+        if not result:
+            print("no positive assigned labels")
+            continue
+        else:
+            loss = result
         # loss_mask = mask_loss_func(mask_out.view(mask_out.size(0), -1), masks.view(masks.size(0), -1))
 
         # bd_regulation = bd_regulation_func.forward(bd_feature, masks)
@@ -106,12 +111,11 @@ def train():
         optimizer.step()
 
         if iteration % 1 == 0:
-            print('iter: {} || loss:{:.4f}'.format(repr(iteration), loss))
+            print('iter: {} || loss:{:.4f}, keep:{}'.format(repr(iteration), loss, keep_count))
 
-        if iteration != 0 and iteration % 1000 == 0:
+        if iteration != 0 and iteration % 10 == 0:
             print('Saving state, iter:', iteration)
-            torch.save(net.module.state_dict(), 'weights/lstd_source' +
-                       repr(iteration) + '.pth')
+            # torch.save(net.module.state_dict(), 'weights/lstd_source' + repr(iteration) + '.pth')
 
 
 def adjust_learning_rate(optimizer, gamma, step):

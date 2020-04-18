@@ -88,6 +88,8 @@ class ClassifierLoss(nn.Module):
         _, idx_rank = loss_idx.sort(1)
         num_pos = pos.long().sum(1, keepdim=True)
         N = num_pos.data.sum()
+        if N == 0:
+            return False
         num_neg = torch.clamp(self.negpos_ratio * num_pos, max=pos.size(1) - 1)
         neg = idx_rank < num_neg.expand_as(idx_rank)
 
