@@ -34,7 +34,7 @@ else:
 if not os.path.exists(config.save_folder):
     os.mkdir(config.save_folder)
 
-
+print()
 def train():
     # 数据集
     dataset = VOCDetection(config.VOC_ROOT, transform=SSDAugmentation(config.voc['min_dim']), mask=True)
@@ -44,6 +44,8 @@ def train():
     # 模型
     lstd = build_ssd('train', config.voc['min_dim'])
     net = lstd
+
+    print(net)
 
     print("loading base network...")
     net.vgg.load_state_dict(torch.load(os.path.join(config.pretrained_folder, config.basenet)))
@@ -61,10 +63,10 @@ def train():
 
     # torch.nn.utils.clip_grad_norm(parameters=net.module.classifier.parameters(), max_norm=10, norm_type=2)
     optimizer = optim.Adam(net.parameters(), lr=config.lr, weight_decay=config.weight_decay)
-    rpn_loss_func = MultiBoxLoss(2, 0.3, True, 0, True, 3, 0.5, False, config.cuda) # 判断是否为物体，所以
+    rpn_loss_func = MultiBoxLoss(2, config.rpn_iou_label_thresh, True, 0, True, 3, 0.5, False, config.cuda) # 判断是否为物体，所以
     # 只有2类
     mask_loss_func = nn.BCELoss()
-    conf_loss_func = ClassifierLoss(num_classes=config.num_classes, focal_loss=False)
+    conf_loss_func = ClassifierLoss(num_classes=config.num_classes, focal_loss=False, iou_thresh=config.classifier_iou_label_thresh)
     bd_regulation_func = MaskBlock(is_bd=True)
     net.train()
 
@@ -102,10 +104,10 @@ def train():
             if iteration % 10 == 0:
                 print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f}'.format(repr(iteration), loss, loss_loc, loss_obj))
 
-            if loss <= 4:
+            if loss <= 5:
                 rpn_loss_early_stop += 1
 
-            if iteration >= 10 or rpn_loss_early_stop >= 5:  # 开始训练分类器，调整模式，固定rpn的参数不参与训练
+            if iteration >= config.rpn_train_max_iteration or rpn_loss_early_stop >= 5:  # 开始训练分类器，调整模式，固定rpn的参数不参与训练
                 train_classifier = True
                 optimizer = optim.Adam([
                     {'params': net.roi_pool.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay},

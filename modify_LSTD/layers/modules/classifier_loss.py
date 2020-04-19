@@ -50,11 +50,12 @@ class FocalLoss(nn.Module):
 
 
 class ClassifierLoss(nn.Module):
-    def __init__(self, num_classes=21, focal_loss=False, negpos_ratio=3):
+    def __init__(self, num_classes=21, focal_loss=False, negpos_ratio=3, iou_thresh=0.3):
         super(ClassifierLoss, self).__init__()
         self.num_classes = num_classes
         self.focal_loss = focal_loss
         self.negpos_ratio = negpos_ratio
+        self.iou_thresh = iou_thresh
         if focal_loss:
             self.loss_func = FocalLoss(num_classes=num_classes, size_average=False)
         else:
@@ -74,7 +75,7 @@ class ClassifierLoss(nn.Module):
 
         # 给每一个roi按照与true的iou最大分配标签，如果iou小于阈值则让其为0背景
         for idx in range(batchsize):
-            assign_label_for_rois(rois[idx][0], targets[idx], assign_labels, idx, 0.1)
+            assign_label_for_rois(rois[idx][0], targets[idx], assign_labels, idx, self.iou_thresh)
 
         # HNM
         pos = assign_labels > 0

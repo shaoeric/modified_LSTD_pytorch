@@ -149,7 +149,7 @@ class SSD(nn.Module):
         # roi_out = self.roi_pool(rois, sources[1])  # roi_out:[batch, top_k, 128, 7, 7], keep_count [batch]：将一些问题框（x_max<=x_min）去掉保留下来的roi个数
         # 分类输出（带背景）
         confidence = self.classifier(roi_out, keep_count).to(config.device)  # [batchsize, top_k, num_classes+1]
-        rois = rois[:, :, :confidence.size(1), :]
+        rois = rois[:, :, :confidence.size(1), :]  # [batch, 1, 100, 4]
 
         if self.phase == "train":
             return confidence, rois, rpn_output, keep_count #mask_38, bd_feature
