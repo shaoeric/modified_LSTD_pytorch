@@ -49,7 +49,7 @@ class MultiBoxLoss(nn.Module):
         Args:
             predictions (tuple): A tuple containing loc preds, conf preds,
             and prior boxes from SSD net.
-                conf shape: torch.size(batch_size,num_priors,num_classes)
+                conf shape: torch.size(batch_size,num_priors,source_num_classes)
                 loc shape: torch.size(batch_size,num_priors,4)
                 priors shape: torch.size(num_priors,4)
 

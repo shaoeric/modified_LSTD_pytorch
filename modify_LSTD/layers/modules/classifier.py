@@ -23,7 +23,7 @@ class Classifier(nn.Module):
         # batchsize = x.size(0)
         # num_roi = x.size(1)
         # x = x.view(batchsize, num_roi, -1)
-        # output = torch.zeros(size=(batchsize, num_roi, self.num_classes)).type(x.type())
+        # output = torch.zeros(size=(batchsize, num_roi, self.source_num_classes)).type(x.type())
         # for idx in range(batchsize):
         #     for j in range(num_roi):
         #         out = self.classifier(x[idx][j])

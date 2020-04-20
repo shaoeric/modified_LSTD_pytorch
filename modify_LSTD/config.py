@@ -26,7 +26,8 @@ momentum = 0.9
 weight_decay = 1e-4
 gamma = 0.1
 
-num_classes = 21
+source_num_classes = 21
+target_num_classes = 5
 mask_thresh = 0.3
 top_k = 200
 selected_proposal = 100
@@ -43,7 +44,7 @@ input_size = 300
 
 # SSD300 CONFIGS
 voc = {
-    'num_classes': 21,
+    'source_num_classes': 21,
     'lr_steps': (5000, 8000, 10000),
     'max_iter': 13010,
     'feature_maps': [38, 19, 10, 5, 3, 1],
@@ -75,7 +76,7 @@ VOC_CLASSES = (  # always index 0
 
 
 coco = {
-    'num_classes': 201,
+    'source_num_classes': 201,
     'lr_steps': (280000, 360000, 400000),
     'max_iter': 400000,
     'feature_maps': [38, 19, 10, 5, 3, 1],

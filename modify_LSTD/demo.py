@@ -3,7 +3,7 @@ import torch.nn as nn
 import cv2
 from models.lstd_source import build_ssd
 from data import BaseTransform
-from config import VOC_CLASSES as label, input_size, num_classes, selected_proposal, cuda
+from config import VOC_CLASSES as label, input_size, source_num_classes, selected_proposal, cuda
 from utils.box_utils import nms
 import torchvision
 import config
@@ -23,11 +23,11 @@ def cv2_demo(net, transform):
         rois = rois.cuda() if cuda else rois
 
         batch = confidences.size(0)
-        output = torch.zeros(size=(batch, num_classes, selected_proposal, 5)).to(confidences.device)
+        output = torch.zeros(size=(batch, source_num_classes, selected_proposal, 5)).to(confidences.device)
         for i in range(batch):
             roi = rois[i]
             confidence = confidences[i]
-            for c in range(1, num_classes):
+            for c in range(1, source_num_classes):
                 score = confidence[:, c]
                 keep = torchvision.ops.nms(roi[0, :, :], score, 0.45)[:selected_proposal]
                 count = keep.size(0)

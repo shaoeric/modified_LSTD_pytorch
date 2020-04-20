@@ -56,7 +56,7 @@ class SSD(nn.Module):
         self.post_roi = Post_rois(2, 0, config.top_k, config.conf_thresh, config.rpn_nms_thresh)
         # self.detect = Detect(2, 0, config.top_k, config.conf_thresh, config.rpn_nms_thresh)
         self.roi_pool = RoIPooling(pooled_size=config.pooled_size, img_size=self.size, conved_size=config.pooled_size, conved_channels=config.conved_channel)
-        self.classifier = Classifier(num_classes=config.num_classes)
+        self.classifier = Classifier(num_classes=config.source_num_classes)
         if use_cuda:
             # self.mask_generator = self.mask_generator.cuda(device=config.device)
             self.post_roi = self.post_roi.cuda(device=config.device)
@@ -79,7 +79,7 @@ class SSD(nn.Module):
                 each object detected. Shape: [batch,topk,7]
             train:
                 list of concat outputs from:
-                    1: confidence layers, Shape: [batch*num_priors,num_classes]
+                    1: confidence layers, Shape: [batch*num_priors,source_num_classes]
                     2: localization layers, Shape: [batch,num_priors*4]
                     3: priorbox layers, Shape: [2,num_priors*4]
         """
@@ -148,13 +148,13 @@ class SSD(nn.Module):
 
         # roi_out = self.roi_pool(rois, sources[1])  # roi_out:[batch, top_k, 128, 7, 7], keep_count [batch]：将一些问题框（x_max<=x_min）去掉保留下来的roi个数
         # 分类输出（带背景）
-        confidence = self.classifier(roi_out, keep_count).to(config.device)  # [batchsize, top_k, num_classes+1]
+        confidence = self.classifier(roi_out, keep_count).to(config.device)  # [batchsize, top_k, source_num_classes+1]
         rois = rois[:, :, :confidence.size(1), :]  # [batch, 1, 100, 4]
 
         if self.phase == "train":
             return confidence, rois, rpn_output, keep_count #mask_38, bd_feature
         else:
-            confidence = self.softmax(confidence.view(conf.size(0),-1, config.num_classes))
+            confidence = self.softmax(confidence.view(conf.size(0), -1, config.source_num_classes))
             return confidence, rois,   #mask_38, None
 
     def load_weights(self, base_file):
@@ -257,7 +257,7 @@ def build_ssd(phase, size=300):  # base ssd只检测objectness
     base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
                                      add_extras(extras[str(size)], 1024),
                                      mbox[str(size)], base_classes=2)
-    # return SSD(phase, base_, extras_, head_, num_classes)
+    # return SSD(phase, base_, extras_, head_, source_num_classes)
     return SSD(phase, base_, extras_, head_, 2)
 
 

@@ -20,13 +20,13 @@ class FocalLoss(nn.Module):
         super(FocalLoss,self).__init__()
         self.size_average = size_average
         if isinstance(alpha,list):
-            assert len(alpha) == num_classes   # α可以以list方式输入,size:[num_classes] 用于对不同类别精细地赋予权重
+            assert len(alpha) == num_classes   # α可以以list方式输入,size:[source_num_classes] 用于对不同类别精细地赋予权重
             self.alpha = torch.tensor(alpha)
         else:
             assert alpha < 1   # 如果α为一个常数,则降低第一类的影响,在目标检测中为第一类
             self.alpha = torch.zeros(num_classes)
             self.alpha[0] += alpha
-            self.alpha[1:] += (1-alpha) # α 最终为 [ α, 1-α, 1-α, 1-α, 1-α, ...] size:[num_classes]
+            self.alpha[1:] += (1-alpha) # α 最终为 [ α, 1-α, 1-α, 1-α, 1-α, ...] size:[source_num_classes]
         self.gamma = gamma
 
     def forward(self, preds, labels):
@@ -66,7 +66,7 @@ class ClassifierLoss(nn.Module):
 
         :param rois: scaled tensor [batchsize, 1, top_k, 5]
         :param targets: list of tensors
-        :param prediction: tensor [batchsize, top_k, num_classes+1]
+        :param prediction: tensor [batchsize, top_k, source_num_classes+1]
         :return:
         """
         batchsize = rois.size(0)

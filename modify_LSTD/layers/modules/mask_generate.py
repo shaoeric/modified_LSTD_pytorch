@@ -8,8 +8,8 @@ class ConvFeatureCompress(nn.Module):
         super(ConvFeatureCompress, self).__init__()
 
     def forward(self, x):
-        min_map = torch.min(x, dim=1, keepdim=True)
-        max_map = torch.max(x, dim=1, keepdim=True)
+        min_map, _ = torch.min(x, dim=1, keepdim=True)
+        max_map, _ = torch.max(x, dim=1, keepdim=True)
         var_map = torch.var(x, dim=1, keepdim=True)
         mean_map = torch.mean(x, dim=1, keepdim=True)
         return torch.cat([min_map, max_map, var_map, mean_map], dim=1)

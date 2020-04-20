@@ -16,7 +16,8 @@ from torch.utils.data import DataLoader
 from data import detection_collate
 from data.voc0712 import VOCDetection
 
-from models.lstd_source import build_ssd
+from models.lstd_source import build_ssd as build_source
+from models.lstd_target import build_ssd as build_target
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
@@ -42,33 +43,51 @@ def train():
     batch_iterator = iter(dataloader)
 
     # 模型
-    lstd = build_ssd('train', config.voc['min_dim'])
-    net = lstd
-
-    print(net)
+    source = build_source('test', config.voc['min_dim'])
+    target_net = build_target('train', config.voc['min_dim'], True)
+    target_net.mask_generator.apply(weights_init)
+    print(source)
+    print(target_net)
 
     print("loading base network...")
-    net.vgg.load_state_dict(torch.load(os.path.join(config.pretrained_folder, config.basenet)))
-    net.extras.apply(weights_init)
-    net.loc.apply(weights_init)
-    net.conf.apply(weights_init)
-    net.roi_pool.apply(weights_init)
-    net.classifier.apply(weights_init)
+    source_weights = torch.load(os.path.join(config.save_folder, 'lstd_source12500.pth'), map_location=config.device)
+    source.load_state_dict(source_weights)
 
+    for k, v in target_net.named_parameters():
+        if k in source_weights.keys():
+            v.data = source_weights[k].data  # 直接加载预训练参数
+        else:
+            try:
+                if k.find("weight") >= 0:
+                    nn.init.xavier_normal_(v.data)  # 没有预训练，则使用xavier初始化
+                else:
+                    nn.init.constant_(v.data, 0)  # bias 初始化为0
+            except:  # maskgenerator层 存在channel小于2的，会报错 所以提前初始化，这里捕获跳过
+                pass
 
     if config.cuda:
         # net = torch.nn.DataParallel(net, [0])
         # cudnn.benchmark = True
-        net = net.cuda(device=config.device)
+        source = source.cuda(device=config.device)
+        target_net = target_net.cuda(device=config.device)
 
     # torch.nn.utils.clip_grad_norm(parameters=net.module.classifier.parameters(), max_norm=10, norm_type=2)
-    optimizer = optim.Adam(net.parameters(), lr=config.lr, weight_decay=config.weight_decay)
+    optimizer = optim.Adam(
+        [{'params': target_net.vgg.parameters()},
+        {'params': target_net.extras.parameters()},
+        {'params': target_net.loc.parameters()},
+        {'params': target_net.conf.parameters()},
+        {'params': target_net.mask_feature_map.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay},
+        {'params': target_net.mask_generator.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay}], lr=config.lr/100, weight_decay=config.weight_decay
+    )
+
     rpn_loss_func = MultiBoxLoss(2, config.rpn_iou_label_thresh, True, 0, True, 3, 0.5, False, config.cuda) # 判断是否为物体，所以
     # 只有2类
     mask_loss_func = nn.BCELoss()
     conf_loss_func = ClassifierLoss(num_classes=config.source_num_classes, focal_loss=False, iou_thresh=config.classifier_iou_label_thresh)
     bd_regulation_func = MaskBlock(is_bd=True)
-    net.train()
+    source.eval()
+    target_net.train()
 
     step_index = 0  # 用于lr的调节
     train_classifier = False
@@ -93,17 +112,16 @@ def train():
         optimizer.zero_grad()
 
         if not train_classifier:  # 只训练rpn
-            rpn_out = net(images, train_classifier)
+            rpn_out, mask_out = target_net(images, train_classifier)
             loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
-            # loss_c = conf_loss_func.forward(roi, targets, confidence)  # classification loss
-            # loss_mask = mask_loss_func(mask_out.view(mask_out.size(0), -1), masks.view(masks.size(0), -1))
+            loss_mask = mask_loss_func(mask_out.view(mask_out.size(0), -1), masks.view(masks.size(0), -1))
             # bd_regulation = bd_regulation_func.forward(bd_feature, masks)
             # # l1正则数值过大，达到4000多，l2正则比较平滑，调试过程中遇到的最大为80
             # bd_regulation = torch.sqrt(torch.sum(bd_regulation**2)) / torch.mul(*bd_regulation.shape[:2])
-            loss = loss_loc + loss_obj #+ loss_c # #+ bd_regulation
+            loss = loss_loc + loss_obj + loss_mask #+ loss_c # #+ bd_regulation
             # loss = loss_obj + loss_c # #+ bd_regulation
             if iteration % 10 == 0:
-                print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f}'.format(repr(iteration), loss, loss_loc, loss_obj))
+                print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f} || loss_mask'.format(repr(iteration), loss, loss_loc, loss_obj, loss_mask))
 
             if loss <= 5.5:
                 rpn_loss_early_stop += 1
@@ -111,14 +129,15 @@ def train():
             if iteration >= config.rpn_train_max_iteration or rpn_loss_early_stop >= 50:  # 开始训练分类器，调整模式，固定rpn的参数不参与训练
                 train_classifier = True
                 optimizer = optim.Adam([
-                    {'params': net.roi_pool.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay},
-                    {'params': net.classifier.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay}
+                    {'params': target_net.roi_pool.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay},
+                    {'params': target_net.classifier.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay},
+                    {'params': target_net.classifier_target.parameters(), 'lr':config.lr, 'weight_decay': config.weight_decay},
                 ])
                 iteration = 0
                 print("开始训练分类器, early_stop=", rpn_loss_early_stop)
 
         else:
-            confidence, roi, rpn_out, keep_count = net.forward(images, train_classifier)
+            confidence, roi, rpn_out, keep_count = target_net.forward(images, train_classifier)
             if keep_count.sum() == 0:  # 没有得到正样本
                 print("no positive samples")
                 continue
@@ -140,7 +159,7 @@ def train():
             mode = 'whole' if train_classifier else 'rpn'
             name = 'weights/lstd_source_' + mode + repr(iteration) + '.pth'
             print('Saving state:', name)
-            torch.save(net.state_dict(), name)
+            torch.save(source.state_dict(), name)
 
         iteration += 1
 
