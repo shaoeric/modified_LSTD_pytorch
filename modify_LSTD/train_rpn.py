@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from data import detection_collate
 from data.voc0712 import VOCDetection
 
-from models.lstd_source_bd import build_ssd
+from models.lstd_source import build_ssd
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")

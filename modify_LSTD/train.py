@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from data import detection_collate
 from data.voc0712 import VOCDetection
 
-from models.lstd_source_bd import build_ssd
+from models.lstd_source import build_ssd
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
@@ -73,7 +73,8 @@ def train():
     step_index = 0  # 用于lr的调节
     train_classifier = False
     rpn_loss_early_stop = 0
-    for iteration in range(config.voc['max_iter']):
+    iteration = 0
+    while iteration <= config.voc['max_iter']:
         if iteration in config.voc['lr_steps']:
             step_index += 1
             adjust_learning_rate(optimizer, config.gamma, step_index)
@@ -104,15 +105,16 @@ def train():
             if iteration % 10 == 0:
                 print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f}'.format(repr(iteration), loss, loss_loc, loss_obj))
 
-            if loss <= 5:
+            if loss <= 5.5:
                 rpn_loss_early_stop += 1
 
-            if iteration >= config.rpn_train_max_iteration or rpn_loss_early_stop >= 5:  # 开始训练分类器，调整模式，固定rpn的参数不参与训练
+            if iteration >= config.rpn_train_max_iteration or rpn_loss_early_stop >= 50:  # 开始训练分类器，调整模式，固定rpn的参数不参与训练
                 train_classifier = True
                 optimizer = optim.Adam([
                     {'params': net.roi_pool.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay},
                     {'params': net.classifier.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay}
                 ])
+                iteration = 0
                 print("开始训练分类器, early_stop=", rpn_loss_early_stop)
 
         else:
@@ -120,7 +122,7 @@ def train():
             if keep_count.sum() == 0:  # 没有得到正样本
                 print("no positive samples")
                 continue
-            # loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
+
             result, num = conf_loss_func.forward(roi, targets, confidence)  # classification loss
             # 没有得到label的情况
             if not result:
@@ -135,9 +137,12 @@ def train():
         optimizer.step()
 
         if iteration != 0 and iteration % 500 == 0:
-            print('Saving state, iter:', iteration)
-            torch.save(net.state_dict(), 'weights/lstd_source' +
-                       repr(iteration) + '.pth')
+            mode = 'whole' if train_classifier else 'rpn'
+            name = 'weights/lstd_source_' + mode + repr(iteration) + '.pth'
+            print('Saving state:', name)
+            torch.save(net.state_dict(), name)
+
+        iteration += 1
 
 
 def adjust_learning_rate(optimizer, gamma, step):
