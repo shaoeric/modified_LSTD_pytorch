@@ -138,6 +138,14 @@ def assign_label_for_rois(rois, targets, assigned_label, idx, threshold):
     assigned_label[idx] = conf
 
 
+def match_source_target_prediction_for_rois(rois, source_rois, source_conf, assigned_labels, idx, threshold):
+    overlaps = jaccard(source_rois, rois)
+    best_truth_overlap, best_truth_idx = overlaps.max(0, keepdim=True)
+    conf = source_conf[best_truth_idx]
+    conf[best_truth_overlap < threshold] = 0
+    assigned_labels[idx] = conf
+
+
 def encode(matched, priors, variances):
     """Encode the variances from the priorbox layers into the ground truth boxes
     we have matched (based on jaccard overlap) with the prior boxes.

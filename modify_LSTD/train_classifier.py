@@ -76,7 +76,7 @@ def train():
     rpn_loss_func = MultiBoxLoss(2, 0.5, True, 0, True, 3, 0.5, False, config.cuda) # 判断是否为物体，所以
     # 只有2类
     mask_loss_func = nn.BCELoss()
-    conf_loss_func = ClassifierLoss(num_classes=config.num_classes, focal_loss=True)
+    conf_loss_func = ClassifierLoss(num_classes=config.source_num_classes, focal_loss=True)
     bd_regulation_func = MaskBlock(is_bd=True)
     net.train()
 

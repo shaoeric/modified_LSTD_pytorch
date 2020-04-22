@@ -19,26 +19,13 @@ def cv2_demo(net, transform):
         x = torch.tensor(x.unsqueeze(0))
         scale = torch.Tensor([width, height, width, height]).cuda()
         with torch.no_grad():
-            confidences, rois = net(x, True)  # forward pass
-        rois = rois.cuda() if cuda else rois
+            detections = net(x, True)  # forward pass
 
-        batch = confidences.size(0)
-        output = torch.zeros(size=(batch, source_num_classes, selected_proposal, 5)).to(confidences.device)
-        for i in range(batch):
-            roi = rois[i]
-            confidence = confidences[i]
-            for c in range(1, source_num_classes):
-                score = confidence[:, c]
-                keep = torchvision.ops.nms(roi[0, :, :], score, 0.45)[:selected_proposal]
-                count = keep.size(0)
-                output[i, c, :count] = torch.cat((score[keep].unsqueeze(1), roi[0, keep, :]), 1)
-
-        for i in range(output.size(0)):
-            for r in range(output.size(2)):
-                print(output[i, :, r, :])
-                max_score, idx = output[i, :, r, 0].max(-1)
+        for i in range(detections.size(0)):
+            for r in range(detections.size(2)):
+                max_score, idx = detections[i, :, r, 0].max(-1)
                 if max_score.data >= 0.18:
-                    pt = (output[i, idx, r, 1:] * scale).cpu().numpy()
+                    pt = (detections[i, idx, r, 1:] * scale).cpu().numpy()
                     cv2.rectangle(frame,
                                   (int(pt[0]), int(pt[1])),
                                   (int(pt[2]), int(pt[3])),
@@ -47,14 +34,14 @@ def cv2_demo(net, transform):
         return frame
 
     img = cv2.imread("E:\python_project\ssd\ssdpytorch\dataset\VOC\VOCdevkit\VOC2007\JPEGImages"
-                     "\\000030.jpg")
+                     "\\000188.jpg")
     # img = cv2.imread("E:\\lena.jpg")
     frame = predict(img)
     cv2.imshow("", frame)
     cv2.waitKey(0)
 
 
-weights = torch.load("./weights/trained/lstd_source12500.pth", map_location='cuda:0')
+weights = torch.load("./weights/trained/lstd_source_whole13000.pth", map_location='cuda:0')
 net = build_ssd('test', 300).cuda()
 net.load_state_dict(weights)
 transform = BaseTransform(input_size, (104/256.0, 117/256.0, 123/256.0))

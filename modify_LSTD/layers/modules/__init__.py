@@ -6,10 +6,10 @@ from .roi_pool import RoIPooling
 from .classifier import Classifier
 from .classifier_loss import ClassifierLoss
 from .post_rois import Post_rois
-
+from .domain_adapt import AdaptLoss
 
 __all__ = [
     'L2Norm', 'MultiBoxLoss', 'MaskGenerate', 'ConvFeatureCompress',
            'mask_vgg_layers', 'Post_rois','RoIPooling',
-    'classifier', 'ClassifierLoss',
+    'classifier', 'ClassifierLoss', 'AdaptLoss'
 ]

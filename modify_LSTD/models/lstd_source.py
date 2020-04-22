@@ -54,7 +54,7 @@ class SSD(nn.Module):
 
         # faster rcnn part
         self.post_roi = Post_rois(2, 0, config.top_k, config.conf_thresh, config.rpn_nms_thresh)
-        # self.detect = Detect(2, 0, config.top_k, config.conf_thresh, config.rpn_nms_thresh)
+        self.detect = Detect(config.voc['source_num_classes'], 0, config.selected_proposal, config.conf_thresh, config.nms_thresh)
         self.roi_pool = RoIPooling(pooled_size=config.pooled_size, img_size=self.size, conved_size=config.pooled_size, conved_channels=config.conved_channel)
         self.classifier = Classifier(num_classes=config.source_num_classes)
         if use_cuda:
@@ -146,16 +146,18 @@ class SSD(nn.Module):
         #  faster rcnn roi pooling，
         rois, roi_out, keep_count = self.roi_pool(rois, sources[1])  # roi_out:[batch, top_k, 128, 7, 7], keep_count [batch]：将一些问题框（x_max<=x_min）去掉保留下来的roi个数
 
-        # roi_out = self.roi_pool(rois, sources[1])  # roi_out:[batch, top_k, 128, 7, 7], keep_count [batch]：将一些问题框（x_max<=x_min）去掉保留下来的roi个数
         # 分类输出（带背景）
         confidence = self.classifier(roi_out, keep_count).to(config.device)  # [batchsize, top_k, source_num_classes+1]
         rois = rois[:, :, :confidence.size(1), :]  # [batch, 1, 100, 4]
 
         if self.phase == "train":
-            return confidence, rois, rpn_output, keep_count #mask_38, bd_feature
+            return confidence, rois, keep_count #mask_38, bd_feature
+        elif self.phase == "detect":
+            confidence = self.softmax(confidence.view(conf.size(0), -1, config.source_num_classes))
+            return self.detect.forward(confidence, rois)   #mask_38, None
         else:
             confidence = self.softmax(confidence.view(conf.size(0), -1, config.source_num_classes))
-            return confidence, rois,   #mask_38, None
+            return confidence, rois
 
     def load_weights(self, base_file):
         other, ext = os.path.splitext(base_file)

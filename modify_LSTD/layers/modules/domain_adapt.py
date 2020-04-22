@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import config
+from utils.box_utils import match_source_target_prediction_for_rois
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -126,8 +128,9 @@ class DomainAdapt(nn.Module):
         return loss
 
     def cross_entropy(self, source, target):
-        source = torch.softmax(source, dim=1).expand_as(target)
-        loss = abs(torch.sum(source * torch.softmax(target, dim=1)))
+        source = torch.log_softmax(source, dim=-1).expand_as(target)
+        loss = source * torch.log_softmax(target, dim=-1)
+        print(loss)
         return loss
 
     def chisquare(self, source, target):
@@ -143,10 +146,62 @@ class DomainAdapt(nn.Module):
         return dist
 
 
+class SoftTarget(nn.Module):
+    def __init__(self, T):
+        super(SoftTarget, self).__init__()
+        self.T = T
+
+    def forward(self, out_s, out_t):
+        loss = F.kl_div(F.log_softmax(out_s/self.T, dim=-1), F.softmax(out_t/self.T, dim=-1), reduction='batchmean') * self.T * self.T
+        return loss
+
+
+class AdaptLoss(nn.Module):
+    def __init__(self, num_classes=21, negpos_ratio=3, iou_thresh=0.3):
+        super(AdaptLoss, self).__init__()
+        self.num_classes = num_classes
+        self.negpos_ratio = negpos_ratio
+        self.iou_thresh = iou_thresh
+
+    def forward(self, rois, prediction, source_rois, source_conf):
+        """
+
+        :param rois: scaled tensor [batchsize, 1, top_k, 4]
+        :param prediction: tensor [batchsize, top_k, num_classes]
+        :param source_rois
+        :param source_conf: [batchsize, top_k, num_classes]
+        :return:
+        """
+        batchsize = rois.size(0)
+        num_rois = prediction.size(1)
+        assign_labels = torch.zeros(size=(batchsize, num_rois, prediction.size(-1))).long().to(config.device)
+
+        # 给每一个roi按照与true的iou最大分配标签，如果iou小于阈值则让其为0背景
+        for idx in range(batchsize):
+            match_source_target_prediction_for_rois(rois[idx][0], source_rois[idx][0], source_conf[idx], assign_labels, idx, self.iou_thresh)
+
+        assign_labels = assign_labels.view(-1, self.num_classes).float()
+        prediction = prediction.view(-1, self.num_classes).float()
+        pos = torch.sum(prediction, dim=1) > 0
+
+        source_pred = torch.log_softmax(assign_labels, dim=-1).expand_as(prediction)
+        loss = source_pred * torch.log_softmax(prediction, dim=-1)
+        loss = loss[pos].mean()
+        return loss
+
 if __name__ == '__main__':
-    source = torch.randn(size=(1, 21)).to(DEVICE)
-    target = torch.randn(size=(3, 6)).to(DEVICE)
-    domain = DomainAdapt(method="wasserstein")
+    # rois = torch.rand(size=(1,1,5,4))
+    # source_rois = torch.rand(size=(1, 1, 3, 4))
+    # rois[:,:,:,2:] = rois[:,:,:,:2] + 0.5
+    # source_rois[:,:,:,2:] = source_rois[:,:,:,:2] + 0.5
+    #
+    # predict = torch.randn(size=(1, 5, 3))
+    # source_conf = torch.randn(size=(1, 3, 3))
+    # domain = AdaptLoss(3)
+    # domain(rois, predict, source_rois, source_conf)
+    source = torch.tensor([[0.0, 1.0, 1.0]])
+    target = torch.tensor([[0.1, 0.7, 0.8]])
+    domain = DomainAdapt(method="cross_entropy")
     loss = domain(source, target)
-    print(domain)
+    print(loss)
 

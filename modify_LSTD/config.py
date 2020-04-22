@@ -12,6 +12,9 @@ COLORS = ((255, 0, 0, 128), (0, 255, 0, 128), (0, 0, 255, 128),
 MEANS = (104, 117, 123)
 
 VOC_ROOT = "E:/python_project/ssd/ssdpytorch/dataset/VOC/VOCdevkit"
+target_VOC_ROOT = "E:\python_project\ssd\ssdpytorch\dataset\\custom_dataset\\train"
+target_VOC_Annotations = "E:\python_project\ssd\ssdpytorch\dataset\\custom_dataset\\annotations\\train"
+
 basenet = 'vgg16_reducedfc.pth'
 
 pretrained_folder = os.path.join(HOME, 'weights', 'pretrained')
@@ -26,8 +29,8 @@ momentum = 0.9
 weight_decay = 1e-4
 gamma = 0.1
 
-source_num_classes = 21
-target_num_classes = 5
+source_num_classes = 20+1
+target_num_classes = 5+1
 mask_thresh = 0.3
 top_k = 200
 selected_proposal = 100
@@ -74,6 +77,9 @@ VOC_CLASSES = (  # always index 0
     'sheep', 'sofa', 'train', 'tvmonitor'
 )
 
+TARGET_CLASSES = (
+    'bear', 'elephant', 'kite', 'laptop', 'truck'
+)
 
 coco = {
     'source_num_classes': 201,

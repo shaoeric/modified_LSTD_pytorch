@@ -3,6 +3,7 @@ import sys
 import torch
 from torch.utils.data import Dataset
 import cv2
+import os
 import os.path as osp
 import numpy as np
 if sys.version_info[0] == 2: # python version
@@ -24,8 +25,15 @@ class VOCAnnotationTransform(object):
         width (int): width
     """
     def __init__(self, class_to_ind=None, keep_difficult=False):
-        self.class_to_ind = class_to_ind or dict(
-            zip(config.VOC_CLASSES, range(len(config.VOC_CLASSES))))
+        if class_to_ind is not None:
+            if isinstance(class_to_ind, tuple):
+                self.class_to_ind = dict(zip(class_to_ind, range(len(class_to_ind))))
+            elif isinstance(class_to_ind, dict):
+                self.class_to_ind = class_to_ind
+        else:
+            self.class_to_ind = class_to_ind or dict(
+                zip(config.VOC_CLASSES, range(len(config.VOC_CLASSES))))
+
         self.keep_difficult = keep_difficult
 
     def __call__(self, target, width, height):
@@ -41,8 +49,6 @@ class VOCAnnotationTransform(object):
         res = []
         for obj in target.iter('object'):
             difficult = int(obj.find('difficult').text) == 1
-            if not self.keep_difficult and difficult:
-                continue
             name = obj.find('name').text.lower().strip()
             bbox = obj.find('bndbox')
             pts = ['xmin', 'ymin', 'xmax', 'ymax']
@@ -185,23 +191,114 @@ class VOCDetection(Dataset):
             x_max *= w
             y_min *= h
             y_max *= h
-            mask[int(y_min): int(y_max), int(x_min): int(x_max)] = 1
+            mask[int(y_min): int(y_max), int(x_min): int(x_max)] = 1  # 数据训练的时候使用1，但是在显示出来的时候需要把1变成255
         return mask.astype(np.uint8)
 
+
+class CustomDataset(Dataset):
+    """VOC Detection Dataset Object
+
+    input is image, target is annotation
+
+    Arguments:
+        root (string): filepath to VOCdevkit folder.
+        image_set (string): imageset to use (eg. 'train', 'val', 'test')
+        transform (callable, optional): transformation to perform on the
+            input image
+        target_transform (callable, optional): transformation to perform on the
+            target `annotation`
+            (eg: take in caption string, return tensor of word indices)
+        dataset_name (string, optional): which dataset to load
+            (default: 'VOC2007')
+    """
+    def __init__(self, root, annotation_path,
+                 transform=None, target_transform=VOCAnnotationTransform(class_to_ind=config.TARGET_CLASSES), mask=True):
+        self.root = root
+        self.annotation_path = annotation_path
+        self.transform = transform
+        self.target_transform = target_transform
+        self.mask = mask
+        self.ids = list()
+        for file in os.listdir(root):
+            filename, _ = osp.splitext(file)
+            self.ids.append(filename)
+
+    def __getitem__(self, index):
+        im, gt, h, w, img_mask = self.pull_item(index)
+        return im, gt, img_mask
+
+    def __len__(self):
+        return len(self.ids)
+
+    def pull_item(self, index):
+        img_id = self.ids[index]
+        target = ET.parse(osp.join(self.annotation_path, img_id+".xml")).getroot()
+        img = cv2.imread(osp.join(self.root, img_id+".jpg"))
+        height, width, channels = img.shape
+
+        img_mask = None
+        if self.target_transform is not None:
+            target = self.target_transform(target, width, height)  # 相对于原图的变换，而不是相对于300x300
+        if self.transform is not None:
+            target = np.array(target)
+            # 绘制蒙版
+            if self.mask:
+                # 当前img为原尺寸，target是相对于原尺寸的scale，要得到mask
+                img_mask = self.get_mask(height, width, target)
+            # 数据增强变换，让蒙版也参与变换
+            img, boxes, labels, img_mask = self.transform(img, target[:, :4], target[:, 4], img_mask)
+
+            # to rgb
+            img = img[:, :, (2, 1, 0)]
+            target = np.hstack((boxes, np.expand_dims(labels, axis=1)))
+            # 如果mask为True，返回蒙版 蒙版是对应的38x38特征图的蒙版，否则返回None
+            img_mask = cv2.resize(img_mask, (config.voc['feature_maps'][0], config.voc['feature_maps'][0]))
+
+            img_mask = torch.from_numpy(img_mask).unsqueeze(0) if self.mask else None
+            img = torch.from_numpy(img).permute(2, 0, 1)
+
+        return img, target, height, width, img_mask
+
+
+    def get_mask(self, h, w, targets):
+        """
+        绘制图像的蒙版
+        :param h: 原图像的高
+        :param w: 原图像的宽
+        :param targets: 归一化后的坐标以及label
+        :return: 原图像的蒙版，背景区域为黑色，物体区域为白色
+        """
+        mask = np.zeros(shape=(h, w))
+        for target in targets:
+            x_min, y_min, x_max, y_max, _ = target  # scaled
+            x_min *= w
+            x_max *= w
+            y_min *= h
+            y_max *= h
+            mask[int(y_min): int(y_max), int(x_min): int(x_max)] = 1  # 数据训练的时候使用1，但是在显示出来的时候需要把1变成255
+        return mask.astype(np.uint8)
 
 
 if __name__ == '__main__':
     from utils.auguments import SSDAugmentation
     from torch.utils.data import DataLoader
     from data import detection_collate
-    dataset = VOCDetection(config.VOC_ROOT, transform=SSDAugmentation(config.voc['min_dim']),mask=True)
-    dataloader = DataLoader(dataset, batch_size=2, collate_fn=detection_collate,pin_memory=True)
+    # dataset = VOCDetection(config.VOC_ROOT, transform=SSDAugmentation(config.voc['min_dim']),mask=True)
+    # dataloader = DataLoader(dataset, batch_size=2, collate_fn=detection_collate,pin_memory=True)
+    # iterator = iter(dataloader)
+    # # images:[batchsize, channels, h, w]
+    # # targets:list of tensor[number_bbox, 5]
+    # # masks:[batchsize, 1, h, w]
+    # images, targets, masks = next(iterator)
+    # print(images.requires_grad)  # False
+    # # print(targets)
+
+    dataset = CustomDataset(config.target_VOC_ROOT, config.target_VOC_Annotations, transform=SSDAugmentation(config.voc['min_dim']), mask=True)
+    dataloader = DataLoader(dataset, batch_size=2,pin_memory=True, collate_fn=detection_collate)
     iterator = iter(dataloader)
-    # images:[batchsize, channels, h, w]
-    # targets:list of tensor[number_bbox, 5]
-    # masks:[batchsize, 1, h, w]
-    images, targets, masks = next(iterator)
-    print(images.requires_grad)  # False
-    # print(targets)
-
-
+    while True:
+        try:
+            images, targets, masks = next(iterator)
+        except StopIteration as e:
+            print("*"*30)
+            iterator = iter(dataloader)
