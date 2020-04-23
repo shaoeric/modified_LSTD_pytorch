@@ -42,7 +42,7 @@ def cv2_demo(net, transform):
 
 
 weights = torch.load("./weights/trained/lstd_source_whole13000.pth", map_location='cuda:0')
-net = build_ssd('test', 300).cuda()
+net = build_ssd('detect', 300).cuda()
 net.load_state_dict(weights)
 transform = BaseTransform(input_size, (104/256.0, 117/256.0, 123/256.0))
 

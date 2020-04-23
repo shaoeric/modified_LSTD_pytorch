@@ -139,11 +139,8 @@ class SSD(nn.Module):
         if not train_classifier:
             return rpn_output
 
-        # with torch.no_grad():
-        #     rois = self.detect.forward(*rpn_output)[:, 1:, :, :]  # rois.size (batch,1, top_k,
-        # 5)  scaled[0, 1]
         rois = self.post_roi.forward(*rpn_output)[:, 1:, :, :].to(config.device)
-        #  faster rcnn roi pooling，
+
         rois, roi_out, keep_count = self.roi_pool(rois, sources[1])  # roi_out:[batch, top_k, 128, 7, 7], keep_count [batch]：将一些问题框（x_max<=x_min）去掉保留下来的roi个数
 
         # 分类输出（带背景）
@@ -154,9 +151,10 @@ class SSD(nn.Module):
             return confidence, rois, keep_count #mask_38, bd_feature
         elif self.phase == "detect":
             confidence = self.softmax(confidence.view(conf.size(0), -1, config.source_num_classes))
-            return self.detect.forward(confidence, rois)   #mask_38, None
-        else:
-            confidence = self.softmax(confidence.view(conf.size(0), -1, config.source_num_classes))
+            return self.detect.forward(confidence, rois)
+
+        else:  # transfer
+            confidence = confidence.view(conf.size(0), -1, config.source_num_classes)
             return confidence, rois
 
     def load_weights(self, base_file):
@@ -250,9 +248,6 @@ mbox = {
 
 
 def build_ssd(phase, size=300):  # base ssd只检测objectness
-    if phase != "test" and phase != "train":
-        print("Error: Phase not recognized")
-        return
     if size != 300:
         print("Error: Sorry only SSD300 is supported currently!")
         return

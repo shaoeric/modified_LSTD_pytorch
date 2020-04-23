@@ -22,7 +22,7 @@ save_folder = os.path.join(HOME, 'weights', 'trained')
 cuda = True if torch.cuda.is_available() else False
 device = 'cuda:0'
 
-batch_size = 2
+batch_size = 5
 num_workers = 4
 lr = 5e-4
 momentum = 0.9
@@ -32,7 +32,7 @@ gamma = 0.1
 source_num_classes = 20+1
 target_num_classes = 5+1
 mask_thresh = 0.3
-top_k = 200
+top_k = 1000
 selected_proposal = 100
 conf_thresh = 0.01
 rpn_nms_thresh = 0.9

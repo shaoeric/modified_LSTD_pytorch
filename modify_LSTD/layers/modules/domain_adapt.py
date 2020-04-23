@@ -157,11 +157,12 @@ class SoftTarget(nn.Module):
 
 
 class AdaptLoss(nn.Module):
-    def __init__(self, num_classes=21, negpos_ratio=3, iou_thresh=0.3):
+    def __init__(self, num_classes=21, negpos_ratio=3, iou_thresh=0.3, T=2.0):
         super(AdaptLoss, self).__init__()
         self.num_classes = num_classes
         self.negpos_ratio = negpos_ratio
         self.iou_thresh = iou_thresh
+        self.T = T
 
     def forward(self, rois, prediction, source_rois, source_conf):
         """
@@ -180,8 +181,8 @@ class AdaptLoss(nn.Module):
         for idx in range(batchsize):
             match_source_target_prediction_for_rois(rois[idx][0], source_rois[idx][0], source_conf[idx], assign_labels, idx, self.iou_thresh)
 
-        assign_labels = assign_labels.view(-1, self.num_classes).float()
-        prediction = prediction.view(-1, self.num_classes).float()
+        assign_labels = assign_labels.view(-1, self.num_classes).float() / self.T
+        prediction = prediction.view(-1, self.num_classes).float() / self.T
         pos = torch.sum(prediction, dim=1) > 0
 
         source_pred = torch.log_softmax(assign_labels, dim=-1).expand_as(prediction)
