@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from layers.functions import PriorBox, Detect, MaskBlock
-from layers.modules import L2Norm, MultiBoxLoss, RoIPooling, Classifier, MaskGenerate
+from layers.modules import L2Norm, MultiBoxLoss, RoIPooling, Classifier, MaskGenerate, ConvFeatureCompress
 import config
 import os
 from layers.modules import Post_rois
@@ -26,9 +26,10 @@ class SSD(nn.Module):
         head: "multibox head" consists of loc and conf conv layers
     """
 
-    def __init__(self, phase, base, extras, head, num_classes):
+    def __init__(self, phase, base, extras, head, num_classes, target):
         super(SSD, self).__init__()
         self.phase = phase
+        self.target = target
         self.num_classes = num_classes  # objectness 所以是2
         self.cfg = config.voc
         self.priorbox = PriorBox(self.cfg)
@@ -42,26 +43,28 @@ class SSD(nn.Module):
         self.L2Norm = L2Norm(512, 20)
         self.extras = nn.ModuleList(extras)
 
-        # self.mask_feature_map = nn.ModuleList([
-        #     nn.Conv2d(512, 3, kernel_size=3, padding=1, bias=False),  # 从512x38x38的特征图映射到3x38x38特征图
-        #     nn.Conv2d(1, 1, kernel_size=2, stride=2, bias=False)    # 1x38x38 => 1x19x19
-        # ])
-        # self.mask_generator = MaskGenerate(3, 64, self.phase, thresh=config.mask_thresh)
-        # self.mask_block = MaskBlock()
+        if self.target:
+            self.mask_feature_map = nn.ModuleList([
+                ConvFeatureCompress(),  # 从512x38x38的特征图映射到3x38x38特征图
+                nn.Conv2d(1, 1, kernel_size=2, stride=2)    # 1x38x38 => 1x19x19
+            ]).to(config.device)
+            self.mask_generator = MaskGenerate(4, 64).to(config.device)
+            # self.mask_block = MaskBlock()
 
         self.loc = nn.ModuleList(head[0])
         self.conf = nn.ModuleList(head[1])
 
-        # faster rcnn part
         self.post_roi = Post_rois(2, 0, config.top_k, config.conf_thresh, config.rpn_nms_thresh)
-        self.detect = Detect(config.voc['source_num_classes'], 0, config.selected_proposal, config.conf_thresh, config.nms_thresh)
+        self.detect = Detect(config.target_num_classes, 0, config.selected_proposal, config.conf_thresh, config.nms_thresh)
+        # target net module
         self.roi_pool = RoIPooling(pooled_size=config.pooled_size, img_size=self.size, conved_size=config.pooled_size, conved_channels=config.conved_channel)
         self.classifier = Classifier(num_classes=config.source_num_classes)
+        self.classifier_target = Classifier(num_classes=config.target_num_classes)
         if use_cuda:
-            # self.mask_generator = self.mask_generator.cuda(device=config.device)
             self.post_roi = self.post_roi.cuda(device=config.device)
             self.roi_pool = self.roi_pool.cuda(device=config.device)
             self.classifier = self.classifier.cuda(device=config.device)
+            self.classifier_target = self.classifier_target.cuda(device=config.device)
             self.priors = self.priors.cuda(device=config.device)
 
         self.softmax = nn.Softmax(dim=-1)
@@ -96,10 +99,8 @@ class SSD(nn.Module):
 
         bd_feature = x.clone()
         # 生成蒙版
-        # mask_38 = None
-        # if self.phase == 'train':
-        # feature_map = self.mask_feature_map[0](x)
-        # mask_38 = self.mask_generator(feature_map)  # [1, 1, 38, 38]  用来训练 优化loss
+        feature_map = self.mask_feature_map[0](bd_feature)
+        mask_38 = self.mask_generator(feature_map)  # [1, 1, 38, 38]  用来训练 优化loss
         # mask_19 = self.mask_feature_map[1](mask_38)  # [1, 1, 19, 19]  用来掩盖下一层的背景
 
         s = self.L2Norm(x)
@@ -108,8 +109,8 @@ class SSD(nn.Module):
         # apply vgg up to fc7
         for k in range(23, len(self.vgg)):
             x = self.vgg[k](x)
-            # if k == 23 and self.phase == 'train':
-                # x = self.mask_block.forward(x, mask_19)  # 蒙版掩膜
+            # if k == 23:
+            #     x = self.mask_block.forward(x, mask_19)  # 蒙版掩膜
 
         sources.append(x)   # [1, 1024, 19, 19]
 
@@ -132,30 +133,34 @@ class SSD(nn.Module):
         rpn_output = (
             loc.view(loc.size(0), -1, 4),
             conf.view(conf.size(0), -1, self.num_classes),  # [batch, 8732, 2]
-            self.priors 
+            self.priors
         )
 
-        # 训练阶段 只训练rpn
+        # 训练阶段 只训练rpn， 这部分可能也要分开，rpn部分只需要finetune就好 但mask部分要训练多一些
         if not train_classifier:
-            return rpn_output
+            return rpn_output, mask_38
 
         rois = self.post_roi.forward(*rpn_output)[:, 1:, :, :].to(config.device)
-
-        rois, roi_out, keep_count = self.roi_pool(rois, sources[1])  # roi_out:[batch, top_k, 128, 7, 7], keep_count [batch]：将一些问题框（x_max<=x_min）去掉保留下来的roi个数
+        roi_origin = rois.clone()
+        rois, roi_out, keep_count = self.roi_pool(rois, sources[1])
 
         # 分类输出（带背景）
-        confidence = self.classifier(roi_out, keep_count).to(config.device)  # [batchsize, top_k, source_num_classes+1]
-        rois = rois[:, :, :confidence.size(1), :]  # [batch, 1, 100, 4]
+        if self.phase == 'train':
+            confidence_tk = self.classifier(roi_out, keep_count).to(config.device)  # [batchsize, top_k, source_num_classes+1]
+
+        # 还有一个target的confidence
+        target_confidence = self.classifier_target(roi_out, keep_count).to(config.device)
+        rois = rois[:, :, :target_confidence.size(1), :]  # [batch, 1, 100, 4]
 
         if self.phase == "train":
-            return confidence, rois, keep_count, rpn_output #mask_38, bd_feature
-        elif self.phase == "detect":
-            confidence = self.softmax(confidence.view(conf.size(0), -1, config.source_num_classes))
-            return self.detect.forward(confidence, rois)
+            return confidence_tk, rois, target_confidence, keep_count, roi_origin, sources[1], rpn_output, mask_38
 
-        else:  # transfer
-            confidence = confidence.view(conf.size(0), -1, config.source_num_classes)
-            return confidence, rois
+        elif self.phase == "detect":
+            confidence = self.softmax(target_confidence.view(conf.size(0), -1, config.target_num_classes))
+            return self.detect.forward(confidence, rois)
+        else:
+            target_confidence = self.softmax(target_confidence.view(conf.size(0), -1, config.target_num_classes))
+            return target_confidence, rois,   #mask_38, None
 
     def load_weights(self, base_file):
         other, ext = os.path.splitext(base_file)
@@ -247,15 +252,14 @@ mbox = {
 }
 
 
-def build_ssd(phase, size=300):  # base ssd只检测objectness
+def build_ssd(phase, size=300, target=True):  # base ssd只检测objectness
     if size != 300:
         print("Error: Sorry only SSD300 is supported currently!")
         return
     base_, extras_, head_ = multibox(vgg(base[str(size)], 3),
                                      add_extras(extras[str(size)], 1024),
                                      mbox[str(size)], base_classes=2)
-    # return SSD(phase, base_, extras_, head_, source_num_classes)
-    return SSD(phase, base_, extras_, head_, 2)
+    return SSD(phase, base_, extras_, head_, 2, target)
 
 
 if __name__ == '__main__':
@@ -264,4 +268,4 @@ if __name__ == '__main__':
     img = torch.rand(size=(1, 3, 300, 300)).cuda()
     out = net(img)
 
-    # net.print_params_num()
+    net.print_params_num()

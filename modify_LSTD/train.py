@@ -71,7 +71,7 @@ def train():
     net.train()
 
     step_index = 0  # 用于lr的调节
-    train_classifier = False
+    train_classifier = True
     rpn_loss_early_stop = 0
     iteration = 0
     while iteration <= config.voc['max_iter']:
@@ -92,46 +92,61 @@ def train():
 
         optimizer.zero_grad()
 
-        if not train_classifier:  # 只训练rpn
-            rpn_out = net(images, train_classifier)
-            loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
-            # loss_c = conf_loss_func.forward(roi, targets, confidence)  # classification loss
-            # loss_mask = mask_loss_func(mask_out.view(mask_out.size(0), -1), masks.view(masks.size(0), -1))
-            # bd_regulation = bd_regulation_func.forward(bd_feature, masks)
-            # # l1正则数值过大，达到4000多，l2正则比较平滑，调试过程中遇到的最大为80
-            # bd_regulation = torch.sqrt(torch.sum(bd_regulation**2)) / torch.mul(*bd_regulation.shape[:2])
-            loss = loss_loc + loss_obj #+ loss_c # #+ bd_regulation
-            # loss = loss_obj + loss_c # #+ bd_regulation
-            if iteration % 10 == 0:
-                print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f}'.format(repr(iteration), loss, loss_loc, loss_obj))
-
-            if loss <= 5.5:
-                rpn_loss_early_stop += 1
-
-            if iteration >= config.rpn_train_max_iteration or rpn_loss_early_stop >= 50:  # 开始训练分类器，调整模式，固定rpn的参数不参与训练
-                train_classifier = True
-                optimizer = optim.Adam([
-                    {'params': net.roi_pool.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay},
-                    {'params': net.classifier.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay}
-                ])
-                iteration = 0
-                print("开始训练分类器, early_stop=", rpn_loss_early_stop)
-
+        """
+        不分阶段训练
+        """
+        confidence, roi, keep_count, rpn_out = net.forward(images, True)
+        if keep_count.sum() == 0:  # 没有得到正样本
+            print("no positive samples")
+            continue
+        result, num = conf_loss_func.forward(roi, targets, confidence)  # classification loss
+        # 没有得到label的情况
+        if not result:
+            print("no positive assigned labels")
+            continue
         else:
-            confidence, roi, rpn_out, keep_count = net.forward(images, train_classifier)
-            if keep_count.sum() == 0:  # 没有得到正样本
-                print("no positive samples")
-                continue
+            loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)
+            loss = loss_obj + loss_loc + result
+            if iteration % 10 == 0:
+                print('iter: {} || loss:{:.4f} || loss_loc:{:.4f}|| loss_obj:{:.4f} || loss_conf:{:.4f}|| pos:{}'.format(repr(iteration), loss, loss_loc, loss_obj, result, num))
 
-            result, num = conf_loss_func.forward(roi, targets, confidence)  # classification loss
-            # 没有得到label的情况
-            if not result:
-                print("no positive assigned labels")
-                continue
-            else:
-                loss = result
-                if iteration % 10 == 0:
-                    print('iter: {} || loss:{:.4f}, pos:{}'.format(repr(iteration), loss, num))
+        """
+        分阶段训练
+        """
+
+        # if not train_classifier:  # 只训练rpn
+        #     rpn_out = net(images, train_classifier)
+        #     loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
+        #     if iteration % 10 == 0:
+        #         print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f}'.format(repr(iteration), loss, loss_loc, loss_obj))
+        #
+        #     if loss <= 5.5:
+        #         rpn_loss_early_stop += 1
+        #
+        #     if iteration >= config.rpn_train_max_iteration or rpn_loss_early_stop >= 50:  # 开始训练分类器，调整模式，固定rpn的参数不参与训练
+        #         train_classifier = True
+        #         optimizer = optim.Adam([
+        #             {'params': net.roi_pool.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay},
+        #             {'params': net.classifier.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay}
+        #         ])
+        #         iteration = 0
+        #         print("开始训练分类器, early_stop=", rpn_loss_early_stop)
+        #
+        # else:
+        #     confidence, roi, rpn_out, keep_count = net.forward(images, train_classifier)
+        #     if keep_count.sum() == 0:  # 没有得到正样本
+        #         print("no positive samples")
+        #         continue
+        #
+        #     result, num = conf_loss_func.forward(roi, targets, confidence)  # classification loss
+        #     # 没有得到label的情况
+        #     if not result:
+        #         print("no positive assigned labels")
+        #         continue
+        #     else:
+        #         loss = result
+        #         if iteration % 10 == 0:
+        #             print('iter: {} || loss:{:.4f}, pos:{}'.format(repr(iteration), loss, num))
 
         loss.backward()
         optimizer.step()

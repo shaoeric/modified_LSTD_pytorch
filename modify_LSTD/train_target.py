@@ -39,7 +39,7 @@ print()
 def train():
     # 数据集
     dataset = CustomDataset(config.target_VOC_ROOT, config.target_VOC_Annotations, transform=SSDAugmentation(config.voc['min_dim']), mask=True)
-    dataloader = DataLoader(dataset, batch_size=config.batch_size, collate_fn=detection_collate, pin_memory=True, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=config.target_batch_size, collate_fn=detection_collate, pin_memory=True, shuffle=True)
     batch_iterator = iter(dataloader)
 
     # 模型
@@ -50,7 +50,7 @@ def train():
     # print(target_net)
 
     print("loading base network...")
-    source_weights = torch.load(os.path.join(config.save_folder, 'lstd_source12500.pth'), map_location=config.device)
+    source_weights = torch.load(os.path.join(config.save_folder, 'lstd_source_whole13000.pth'), map_location=config.device)
     source.load_state_dict(source_weights)
 
     for k, v in target_net.named_parameters():
@@ -80,6 +80,7 @@ def train():
         {'params': target_net.mask_feature_map.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay},
         {'params': target_net.mask_generator.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay}], lr=config.lr/10, weight_decay=config.weight_decay
     )
+    # optimizer = optim.Adam(target_net.parameters(), lr=config.lr/10, weight_decay=config.weight_decay)
 
     rpn_loss_func = MultiBoxLoss(2, 0.5, True, 0, True, 3, 0.5, False, config.cuda) # 判断是否为物体，所以
     # 只有2类
@@ -91,11 +92,11 @@ def train():
     target_net.train()
 
     step_index = 0  # 用于lr的调节
-    train_classifier = False
+    train_classifier = True
     rpn_loss_early_stop = 0
     iteration = 0
-    while iteration <= config.voc['max_iter']:
-        if iteration in config.voc['lr_steps']:
+    while iteration <= config.target['max_iter']:
+        if iteration in config.target['lr_steps']:
             step_index += 1
             adjust_learning_rate(optimizer, config.gamma, step_index)
 
@@ -111,57 +112,96 @@ def train():
             targets = [ann.cuda(device=config.device) for ann in targets]
 
         optimizer.zero_grad()
-        if not train_classifier:  # 只训练rpn
+
+        if not train_classifier:
             rpn_out, mask_out = target_net(images, train_classifier)
             loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
             loss_mask = mask_loss_func(mask_out.view(mask_out.size(0), -1), masks.view(masks.size(0), -1)) * 10
-            # bd_regulation = bd_regulation_func.forward(mask_out, masks)
-            # # l1正则数值过大，达到4000多，l2正则比较平滑，调试过程中遇到的最大为80
-            # bd_regulation = torch.sqrt(torch.sum(bd_regulation**2)) / torch.mul(*bd_regulation.shape[:2])
-            loss = loss_loc + loss_obj + loss_mask #+ loss_c # #+ bd_regulation
-            # loss = loss_obj + loss_c # #+ bd_regulation
+            loss = loss_loc + loss_obj + loss_mask
             if iteration % 10 == 0:
                 print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f} || loss_mask:{:.4f}'.format(repr(iteration), loss, loss_loc, loss_obj, loss_mask))
 
-            if loss <= 5.5:
+            if loss <= 10:
                 rpn_loss_early_stop += 1
 
-            if iteration >= 400 or rpn_loss_early_stop >= 50:  # 开始训练分类器，调整模式，固定rpn的参数不参与训练
+            if iteration >= 200 or rpn_loss_early_stop >= 50:  # 开始训练分类器，调整模式，固定rpn的参数不参与训练
                 train_classifier = True
-                optimizer = optim.Adam([
-                    {'params': target_net.roi_pool.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay},
-                    {'params': target_net.classifier_target.parameters(), 'lr':config.lr, 'weight_decay': config.weight_decay},
-                    {'params': target_net.classifier.parameters(), 'lr': config.lr / 10, 'weight_decay': config.weight_decay},
-                    {'params': source.roi_pool.parameters(), 'lr': config.lr / 10, 'weight_decay': config.weight_decay},
-                    {'params': source.classifier.parameters(), 'lr': config.lr / 10, 'weight_decay': config.weight_decay},
-                ])
-                iteration = 0
-                print("开始训练分类器, early_stop=", rpn_loss_early_stop)
-                name = 'weights/lstd_target_' + "rpn" + repr(iteration) + '.pth'
-                print('Saving state:', name)
-                torch.save(target_net.state_dict(), name)
+                optimizer = optim.Adam(target_net.parameters(), lr=config.lr/10, weight_decay=config.weight_decay)
+        """
+        不分段训练
+        """
+        confidence_tk, rois, target_confidence, keep_count, roi_origin, feature, rpn_out, mask_out = target_net.forward(images,True)
+
+        if keep_count.sum() == 0:  # 没有得到正样本
+            print("no positive samples")
+            continue
+        result_truth, num = conf_loss_func.forward(rois, targets, target_confidence)  # classification loss
+        # 没有得到label的情况
+        if not result_truth:
+            print("no positive assigned labels")
+            continue
         else:
-            #### Todo target的分类器需要与truth的交并比 做分类，也要和sourcenet的roi做交并比做分类，因为target做了微调，box可能出现变化
-            confidence_tk, rois, target_confidence, keep_count, roi_origin, feature = target_net.forward(images, train_classifier)
+            loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
+            loss_mask = mask_loss_func(mask_out.view(mask_out.size(0), -1), masks.view(masks.size(0), -1)) * 10
+            # source网络只需要留下roipooling和classifier
+            source_roi, source_roi_out, source_keep_count = source.roi_pool.forward(roi_origin, feature)
+            source_conf = source.classifier.forward(source_roi_out, source_keep_count).to(config.device)
+            source_roi = source_roi[:, :, :source_conf.size(1), :]
+            tk_reg = tk_regulation_func.forward(rois, confidence_tk, source_roi, source_conf)
+            loss = loss_loc + loss_obj + loss_mask + result_truth + tk_reg
 
-            if keep_count.sum() == 0:  # 没有得到正样本
-                print("no positive samples")
-                continue
-            result_truth, num = conf_loss_func.forward(rois, targets, target_confidence)  # classification loss
-            # 没有得到label的情况
-            if not result_truth:
-                print("no positive assigned labels")
-                continue
-            else:
-                # source网络只需要留下roipooling和classifier
-                source_roi, source_roi_out, source_keep_count = source.roi_pool.forward(roi_origin, feature)
-                source_conf = source.classifier.forward(source_roi_out, source_keep_count).to(config.device)
-                source_roi = source_roi[:, :, :source_conf.size(1), :]
+            if iteration % 10 == 0:
+                print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f} || loss_mask:{:.4f} || loss_conf:{:.4f} || tk:{:.4f} || pos:{}'.format(repr(iteration), loss, loss_loc, loss_obj, loss_mask, result_truth, tk_reg, num))
 
-                tk_reg = tk_regulation_func.forward(rois, confidence_tk, source_roi, source_conf)
-                loss = result_truth + tk_reg
-                if iteration % 1 == 0:
-                    print('iter: {} || loss:{:.4f} || loss_conf:{:.4f} || tk:{:.4f}'.format(repr(iteration), loss, result_truth, tk_reg))
+
+        """
+        分阶段训练
+        """
+        # if not train_classifier:  # 只训练rpn
+        #     rpn_out, mask_out = target_net(images, train_classifier)
+        #     loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
+        #     loss_mask = mask_loss_func(mask_out.view(mask_out.size(0), -1), masks.view(masks.size(0), -1)) * 10
+        #     if iteration % 10 == 0:
+        #         print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f} || loss_mask:{:.4f}'.format(repr(iteration), loss, loss_loc, loss_obj, loss_mask))
+        #
+        #     if loss <= 5.5:
+        #         rpn_loss_early_stop += 1
+        #
+        #     if iteration >= 400 or rpn_loss_early_stop >= 50:  # 开始训练分类器，调整模式，固定rpn的参数不参与训练
+        #         train_classifier = True
+        #         optimizer = optim.Adam([
+        #             {'params': target_net.roi_pool.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay},
+        #             {'params': target_net.classifier_target.parameters(), 'lr':config.lr, 'weight_decay': config.weight_decay},
+        #             {'params': target_net.classifier.parameters(), 'lr': config.lr / 10, 'weight_decay': config.weight_decay},
+        #             {'params': source.roi_pool.parameters(), 'lr': config.lr / 10, 'weight_decay': config.weight_decay},
+        #             {'params': source.classifier.parameters(), 'lr': config.lr / 10, 'weight_decay': config.weight_decay},
+        #         ])
+        #         iteration = 0
+        #         print("开始训练分类器, early_stop=", rpn_loss_early_stop)
+        #         name = 'weights/lstd_target_' + "rpn" + repr(iteration) + '.pth'
+        #         print('Saving state:', name)
+        #         torch.save(target_net.state_dict(), name)
+        # else:
+        #     confidence_tk, rois, target_confidence, keep_count, roi_origin, feature = target_net.forward(images, train_classifier)
+        #
+        #     if keep_count.sum() == 0:  # 没有得到正样本
+        #         print("no positive samples")
+        #         continue
+        #     result_truth, num = conf_loss_func.forward(rois, targets, target_confidence)  # classification loss
+        #     # 没有得到label的情况
+        #     if not result_truth:
+        #         print("no positive assigned labels")
+        #         continue
+        #     else:
+        #         # source网络只需要留下roipooling和classifier
+        #         source_roi, source_roi_out, source_keep_count = source.roi_pool.forward(roi_origin, feature)
+        #         source_conf = source.classifier.forward(source_roi_out, source_keep_count).to(config.device)
+        #         source_roi = source_roi[:, :, :source_conf.size(1), :]
+        #
+        #         tk_reg = tk_regulation_func.forward(rois, confidence_tk, source_roi, source_conf)
+        #         loss = result_truth + tk_reg
+        #         if iteration % 1 == 0:
+        #             print('iter: {} || loss:{:.4f} || loss_conf:{:.4f} || tk:{:.4f}'.format(repr(iteration), loss, result_truth, tk_reg))
 
         loss.backward()
         optimizer.step()

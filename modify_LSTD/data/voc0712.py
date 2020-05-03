@@ -6,6 +6,7 @@ import cv2
 import os
 import os.path as osp
 import numpy as np
+from data import BaseTransform
 if sys.version_info[0] == 2: # python version
     import xml.etree.cElementTree as ET
 else:
@@ -246,7 +247,10 @@ class CustomDataset(Dataset):
                 # 当前img为原尺寸，target是相对于原尺寸的scale，要得到mask
                 img_mask = self.get_mask(height, width, target)
             # 数据增强变换，让蒙版也参与变换
-            img, boxes, labels, img_mask = self.transform(img, target[:, :4], target[:, 4], img_mask)
+            if isinstance(self.transform, BaseTransform):
+                img, boxes, labels = self.transform(img, target[:, :4], target[:, 4])
+            else:
+                img, boxes, labels, img_mask = self.transform(img, target[:, :4], target[:, 4], img_mask)
 
             # to rgb
             img = img[:, :, (2, 1, 0)]

@@ -12,8 +12,12 @@ COLORS = ((255, 0, 0, 128), (0, 255, 0, 128), (0, 0, 255, 128),
 MEANS = (104, 117, 123)
 
 VOC_ROOT = "E:/python_project/ssd/ssdpytorch/dataset/VOC/VOCdevkit"
-target_VOC_ROOT = "E:\python_project\ssd\ssdpytorch\dataset\\custom_dataset\\train"
-target_VOC_Annotations = "E:\python_project\ssd\ssdpytorch\dataset\\custom_dataset\\annotations\\train"
+
+target_ROOT = "E:\python_project\ssd\ssdpytorch\dataset\\custom_dataset"
+target_VOC_ROOT = os.path.join(target_ROOT, "train")
+target_VOC_Annotations = os.path.join(target_ROOT,'annotations', 'train')
+target_VOC_VAL_ROOT = os.path.join(target_ROOT,'val')
+target_VOC_VAL_Annotations = os.path.join(target_ROOT,'annotations', 'val')
 
 basenet = 'vgg16_reducedfc.pth'
 
@@ -22,7 +26,8 @@ save_folder = os.path.join(HOME, 'weights', 'trained')
 cuda = True if torch.cuda.is_available() else False
 device = 'cuda:0'
 
-batch_size = 5
+batch_size = 1
+target_batch_size = 1
 num_workers = 4
 lr = 5e-4
 momentum = 0.9
@@ -59,6 +64,10 @@ voc = {
     'variance': [0.1, 0.2],
     'clip': True,
     'name': 'VOC',
+}
+target = {
+    'lr_steps': (500, 1000, 1500),
+    'max_iter': 2010
 }
 
 print(
