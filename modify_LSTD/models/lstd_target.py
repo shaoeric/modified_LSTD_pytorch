@@ -43,6 +43,7 @@ class SSD(nn.Module):
         self.L2Norm = L2Norm(512, 20)
         self.extras = nn.ModuleList(extras)
 
+        # 目标域蒙版生成部分
         if self.target:
             self.mask_feature_map = nn.ModuleList([
                 ConvFeatureCompress(),  # 从512x38x38的特征图映射到3x38x38特征图
@@ -101,7 +102,6 @@ class SSD(nn.Module):
         # 生成蒙版
         feature_map = self.mask_feature_map[0](bd_feature)
         mask_38 = self.mask_generator(feature_map)  # [1, 1, 38, 38]  用来训练 优化loss
-        # mask_19 = self.mask_feature_map[1](mask_38)  # [1, 1, 19, 19]  用来掩盖下一层的背景
 
         s = self.L2Norm(x)
         sources.append(s)   # [1, 512, 38, 38]
@@ -109,8 +109,6 @@ class SSD(nn.Module):
         # apply vgg up to fc7
         for k in range(23, len(self.vgg)):
             x = self.vgg[k](x)
-            # if k == 23:
-            #     x = self.mask_block.forward(x, mask_19)  # 蒙版掩膜
 
         sources.append(x)   # [1, 1024, 19, 19]
 
@@ -157,7 +155,7 @@ class SSD(nn.Module):
 
         elif self.phase == "detect":
             confidence = self.softmax(target_confidence.view(conf.size(0), -1, config.target_num_classes))
-            return self.detect.forward(confidence, rois)
+            return self.detect.forward(confidence, rois), mask_38
         else:
             target_confidence = self.softmax(target_confidence.view(conf.size(0), -1, config.target_num_classes))
             return target_confidence, rois,   #mask_38, None
