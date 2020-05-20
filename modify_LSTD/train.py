@@ -71,7 +71,6 @@ def train():
     net.train()
 
     step_index = 0  # 用于lr的调节
-    train_classifier = True
     rpn_loss_early_stop = 0
     iteration = 0
     while iteration <= config.voc['max_iter']:
@@ -92,9 +91,7 @@ def train():
 
         optimizer.zero_grad()
 
-        """
-        不分阶段训练
-        """
+
         confidence, roi, keep_count, rpn_out = net.forward(images, True)
         if keep_count.sum() == 0:  # 没有得到正样本
             print("no positive samples")
@@ -110,50 +107,12 @@ def train():
             if iteration % 10 == 0:
                 print('iter: {} || loss:{:.4f} || loss_loc:{:.4f}|| loss_obj:{:.4f} || loss_conf:{:.4f}|| pos:{}'.format(repr(iteration), loss, loss_loc, loss_obj, result, num))
 
-        """
-        分阶段训练
-        """
-
-        # if not train_classifier:  # 只训练rpn
-        #     rpn_out = net(images, train_classifier)
-        #     loss_loc, loss_obj = rpn_loss_func.forward(rpn_out, targets)  # objectness and loc loss
-        #     if iteration % 10 == 0:
-        #         print('iter: {} || loss:{:.4f} || loss_loc:{:.4f} || loss_obj:{:.4f}'.format(repr(iteration), loss, loss_loc, loss_obj))
-        #
-        #     if loss <= 5.5:
-        #         rpn_loss_early_stop += 1
-        #
-        #     if iteration >= config.rpn_train_max_iteration or rpn_loss_early_stop >= 50:  # 开始训练分类器，调整模式，固定rpn的参数不参与训练
-        #         train_classifier = True
-        #         optimizer = optim.Adam([
-        #             {'params': net.roi_pool.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay},
-        #             {'params': net.classifier.parameters(), 'lr': config.lr, 'weight_decay': config.weight_decay}
-        #         ])
-        #         iteration = 0
-        #         print("开始训练分类器, early_stop=", rpn_loss_early_stop)
-        #
-        # else:
-        #     confidence, roi, rpn_out, keep_count = net.forward(images, train_classifier)
-        #     if keep_count.sum() == 0:  # 没有得到正样本
-        #         print("no positive samples")
-        #         continue
-        #
-        #     result, num = conf_loss_func.forward(roi, targets, confidence)  # classification loss
-        #     # 没有得到label的情况
-        #     if not result:
-        #         print("no positive assigned labels")
-        #         continue
-        #     else:
-        #         loss = result
-        #         if iteration % 10 == 0:
-        #             print('iter: {} || loss:{:.4f}, pos:{}'.format(repr(iteration), loss, num))
 
         loss.backward()
         optimizer.step()
 
         if iteration != 0 and iteration % 500 == 0:
-            mode = 'whole' if train_classifier else 'rpn'
-            name = 'weights/lstd_source_' + mode + repr(iteration) + '.pth'
+            name = 'weights/lstd_source_' + repr(iteration) + '.pth'
             print('Saving state:', name)
             torch.save(net.state_dict(), name)
 

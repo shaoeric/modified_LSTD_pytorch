@@ -1,0 +1,26 @@
+<annotation verified="yes">
+	<folder>val</folder>
+	<filename>kitea.jpg</filename>
+	<path>E:\python_project\ssd\毕业设计\custom_dataset\val\kitea.jpg</path>
+	<source>
+		<database>Unknown</database>
+	</source>
+	<size>
+		<width>900</width>
+		<height>589</height>
+		<depth>3</depth>
+	</size>
+	<segmented>0</segmented>
+	<object>
+		<name>kite</name>
+		<pose>Unspecified</pose>
+		<truncated>0</truncated>
+		<difficult>0</difficult>
+		<bndbox>
+			<xmin>85</xmin>
+			<ymin>86</ymin>
+			<xmax>361</xmax>
+			<ymax>347</ymax>
+		</bndbox>
+	</object>
+</annotation>

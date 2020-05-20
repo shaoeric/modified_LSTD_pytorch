@@ -1,0 +1,26 @@
+<annotation verified="yes">
+	<folder>val</folder>
+	<filename>kiteb.jpg</filename>
+	<path>E:\python_project\ssd\毕业设计\custom_dataset\val\kiteb.jpg</path>
+	<source>
+		<database>Unknown</database>
+	</source>
+	<size>
+		<width>870</width>
+		<height>872</height>
+		<depth>3</depth>
+	</size>
+	<segmented>0</segmented>
+	<object>
+		<name>kite</name>
+		<pose>Unspecified</pose>
+		<truncated>0</truncated>
+		<difficult>0</difficult>
+		<bndbox>
+			<xmin>91</xmin>
+			<ymin>243</ymin>
+			<xmax>366</xmax>
+			<ymax>604</ymax>
+		</bndbox>
+	</object>
+</annotation>

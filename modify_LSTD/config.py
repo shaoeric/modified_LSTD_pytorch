@@ -11,9 +11,9 @@ COLORS = ((255, 0, 0, 128), (0, 255, 0, 128), (0, 0, 255, 128),
 
 MEANS = (104, 117, 123)
 
-VOC_ROOT = "E:/python_project/ssd/ssdpytorch/dataset/VOC/VOCdevkit"
+VOC_ROOT = "dataset/VOC/VOCdevkit"
 
-target_ROOT = "E:\python_project\ssd\ssdpytorch\dataset\\custom_dataset"
+target_ROOT = "dataset/custom_dataset"
 target_VOC_ROOT = os.path.join(target_ROOT, "train")
 target_VOC_Annotations = os.path.join(target_ROOT,'annotations', 'train')
 target_VOC_VAL_ROOT = os.path.join(target_ROOT,'val')
@@ -26,8 +26,8 @@ save_folder = os.path.join(HOME, 'weights', 'trained')
 cuda = True if torch.cuda.is_available() else False
 device = 'cuda:0'
 
-batch_size = 1
-target_batch_size = 1
+batch_size = 16
+target_batch_size = 5
 num_workers = 4
 lr = 5e-4
 momentum = 0.9
@@ -44,7 +44,7 @@ rpn_nms_thresh = 0.9
 rpn_iou_label_thresh = 0.3
 rpn_train_max_iteration = 4000
 classifier_iou_label_thresh = 0.3
-nms_thresh = 0.45
+nms_thresh = 0.7
 pooled_size = 7
 conved_channel = 128
 input_size = 300
@@ -88,6 +88,7 @@ VOC_CLASSES = (  # always index 0
 
 TARGET_CLASSES = (
     'bear', 'elephant', 'kite', 'laptop', 'truck'
+    # 'hero','tower', 'crab', 'buff','frog', 'dragon'
 )
 
 coco = {
